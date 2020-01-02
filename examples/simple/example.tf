@@ -1,5 +1,6 @@
 provider "aws" {
-  region = "us-west-2"
+  version = "~> 2.42"
+  region  = "us-west-2"
 }
 
 data "aws_ecr_repository" "pre_made_repo" {
