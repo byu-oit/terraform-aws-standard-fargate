@@ -1,3 +1,5 @@
+![Latest GitHub Release](https://img.shields.io/github/v/release/byu-oit/terraform-aws-standard-fargate?sort=semver)
+
 # Terraform AWS Standard Fargate
 Terraform module pattern to build a standard Fargate API.
 
