@@ -47,6 +47,8 @@ predicament of when to actually upload the image to ECR
 | image | The docker image (including tag). Include the full URI if not pulling from docker hub | |
 | image_port | The port the docker image is listening on | |
 | health_check_path | Health check path for the image | "/" |
+| container_env_variables | Map of environment variables to pass to the container definition | {} |
+| container_secrets | Map of secrets from the parameter store to be assigned to env variables. Use `task_policies` to make sure the Task's IAM role has access to the SSM parameters | {} |
 | min_capacity | Minimum task count for autoscaling | 1 |
 | max_capacity | Maximum task count for autoscaling | 2 | 
 
