@@ -8,7 +8,7 @@ data "aws_ecr_repository" "pre_made_repo" {
 }
 
 module "fargate_api" {
-  source = "git@github.com:byu-oit/terraform-aws-standard-fargate?ref=v1.0.0"
+  source = "git@github.com:byu-oit/terraform-aws-standard-fargate?ref=v0.1.0"
 //  source     = "../../" // for local testing
   app_name   = "example-api"
   image      = "${data.aws_ecr_repository.pre_made_repo.repository_url}:test"
@@ -16,5 +16,5 @@ module "fargate_api" {
 }
 
 output "appspec" {
-  value = module.fargate_api.appspec
+  value = module.fargate_api.codedeploy_appspec_json
 }
