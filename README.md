@@ -49,6 +49,7 @@ predicament of when to actually upload the image to ECR
 | health_check_path | Health check path for the image | "/" |
 | container_env_variables | Map of environment variables to pass to the container definition | {} |
 | container_secrets | Map of secrets from the parameter store to be assigned to env variables. Use `task_policies` to make sure the Task's IAM role has access to the SSM parameters | {} |
+| task_policies | List of IAM Policy ARNs to attach to the task execution IAM Policy| [] |
 | min_capacity | Minimum task count for autoscaling | 1 |
 | max_capacity | Maximum task count for autoscaling | 2 | 
 

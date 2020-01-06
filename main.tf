@@ -59,6 +59,7 @@ module "fargate" {
   container_image = var.image
   container_env_variables = var.container_env_variables
   container_secrets = var.container_secrets
+  task_policies = var.task_policies
 
   blue_green_deployment_config = {
     termination_wait_time_after_deployment_success = null // defaults to 15
