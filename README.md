@@ -56,9 +56,9 @@ module "my-app" {
 ## Outputs
 | Name | Type | Description |
 | --- | --- | --- |
-| fargate_service | object | Fargate ECS Service [object](https://www.terraform.io/docs/providers/aws/r/ecs_service.html#attributes-reference) |
-| fargate_service_security_group | object | Security Group [object](https://www.terraform.io/docs/providers/aws/r/security_group.html#attributes-reference) assigned to the Fargate service |
+| fargate_service | [object](https://www.terraform.io/docs/providers/aws/r/ecs_service.html#attributes-reference) | Fargate ECS Service object |
+| fargate_service_security_group | [object](https://www.terraform.io/docs/providers/aws/r/security_group.html#attributes-reference) assigned to the Fargate service | Security Group object |
 | codedeploy_appspec_json | string | JSON string of a simple appspec.json file to be used in the CodeDeploy deployment |
-| alb | object | The Application Load Balancer (ALB) [object](https://www.terraform.io/docs/providers/aws/r/lb.html#attributes-reference) |
-| alb_security_group | object | The ALB's security group [object](https://www.terraform.io/docs/providers/aws/r/security_group.html#attributes-reference) |
-| dns_record | object | The DNS A-record mapped to the ALB | 
+| alb | [object](https://www.terraform.io/docs/providers/aws/r/lb.html#attributes-reference) | The Application Load Balancer (ALB) object |
+| alb_security_group | [object](https://www.terraform.io/docs/providers/aws/r/security_group.html#attributes-reference) | The ALB's security group object |
+| dns_record | [object](https://www.terraform.io/docs/providers/aws/r/route53_record.html#attributes-reference) | The DNS A-record mapped to the ALB | 
