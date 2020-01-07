@@ -6,46 +6,84 @@ terraform {
 }
 
 module "acs" {
-  source = "git@github.com:byu-oit/terraform-aws-acs-info.git?ref=v1.0.5"
-  env    = "dev"
+  source = "git@github.com:byu-oit/terraform-aws-acs-info.git?ref=v1.2.0"
+  env    = var.env
 }
 
 module "alb" {
-  source     = "git@github.com:byu-oit/terraform-aws-alb.git?ref=v1.1.0"
+  source     = "git@github.com:byu-oit/terraform-aws-alb.git?ref=v1.2.0"
   name       = "${var.app_name}-alb"
   vpc_id     = module.acs.vpc.id
   subnet_ids = module.acs.public_subnet_ids
-  default_target_group_config = {
-    type                 = "ip"
-    deregistration_delay = null
-    slow_start           = null
-    health_check = {
-      path                = var.health_check_path
-      interval            = null
-      timeout             = null
-      healthy_threshold   = null
-      unhealthy_threshold = null
-    }
-    stickiness_cookie_duration = null
-  }
-  target_groups = [
-    {
-      name_suffix    = "blue"
-      listener_ports = [80]
-      port           = var.image_port
-      config         = null
+  target_groups = {
+    blue = {
+      port                       = var.image_port
+      type                       = "ip"
+      deregistration_delay       = null
+      slow_start                 = null
+      stickiness_cookie_duration = null
+      health_check = {
+        path                = var.health_check_path
+        interval            = null
+        timeout             = null
+        healthy_threshold   = null
+        unhealthy_threshold = null
+      }
     },
-    {
-      name_suffix    = "green"
-      listener_ports = []
-      port           = var.image_port
-      config         = null
+    green = {
+      port                       = var.image_port
+      type                       = "ip"
+      deregistration_delay       = null
+      slow_start                 = null
+      stickiness_cookie_duration = null
+      health_check = {
+        path                = var.health_check_path
+        interval            = null
+        timeout             = null
+        healthy_threshold   = null
+        unhealthy_threshold = null
+      }
     }
-  ]
+  }
+  listeners = {
+    80 = {
+      protocol              = "HTTP"
+      https_certificate_arn = null
+      redirect_to = {
+        host     = null
+        path     = null
+        port     = 443
+        protocol = "HTTPS"
+      }
+      forward_to = null
+    },
+    443 = {
+      protocol              = "HTTPS"
+      https_certificate_arn = module.acs.certificate.arn
+      redirect_to           = null
+      forward_to = {
+        target_group   = "blue"
+        ignore_changes = true
+      }
+    }
+  }
+}
+
+module "ecr" {
+  source               = "git@github.com:byu-oit/terraform-aws-ecr?ref=v1.0.0"
+  name                 = var.app_name
+  image_tag_mutability = "IMMUTABLE"
+}
+
+module "ecr_initial_image" {
+  source             = "git@github.com:byu-oit/terraform-aws-ecr-image?ref=v1.0.0"
+  dockerfile_dir     = var.dockerfile_dir
+  ecr_repository_url = module.ecr.repository.repository_url
+  docker_image_tag   = formatdate("YYYY-MM-DD_hh-mm", timestamp())
 }
 
 module "fargate" {
-  source              = "git@github.com:byu-oit/terraform-aws-fargate.git?ref=v1.0.0"
+  source              = "git@github.com:byu-oit/terraform-aws-fargate.git?ref=v1.1.0"
   app_name            = var.app_name
   vpc_id              = module.acs.vpc.id
   subnet_ids          = module.acs.private_subnet_ids
@@ -56,20 +94,22 @@ module "fargate" {
       port = module.alb.target_groups["blue"].port
     }
   ]
-  container_image = var.image
+  container_image         = module.ecr_initial_image.ecr_image_url
   container_env_variables = var.container_env_variables
-  container_secrets = var.container_secrets
-  task_policies = var.task_policies
+  container_secrets       = var.container_secrets
+  task_policies           = var.task_policies
 
   blue_green_deployment_config = {
     termination_wait_time_after_deployment_success = null // defaults to 15
-    prod_traffic_listener_arns                     = [module.alb.listeners[80].arn]
+    prod_traffic_listener_arns                     = [module.alb.listeners[443].arn]
     test_traffic_listener_arns                     = []
     blue_target_group_name                         = module.alb.target_groups["blue"].name
     green_target_group_name                        = module.alb.target_groups["green"].name
+    service_role_arn                               = module.acs.power_builder_role.arn
   }
 
-  module_depends_on = [module.alb.alb]
+  module_depends_on             = [module.alb.alb]
+  role_permissions_boundary_arn = module.acs.role_permissions_boundary.arn
 }
 
 module "autoscaling" {
