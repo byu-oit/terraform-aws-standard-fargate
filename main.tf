@@ -5,6 +5,14 @@ terraform {
   }
 }
 
+locals {
+  assummed_tags = {
+    env = var.env
+    data-sensitivity = "confidential"
+  }
+  tags = merge(local.assummed_tags, var.tags)
+}
+
 module "acs" {
   source = "git@github.com:byu-oit/terraform-aws-acs-info.git?ref=v1.2.0"
   env    = var.env
@@ -67,12 +75,14 @@ module "alb" {
       }
     }
   }
+  tags = local.tags
 }
 
 module "ecr" {
   source               = "git@github.com:byu-oit/terraform-aws-ecr?ref=v1.0.0"
   name                 = var.app_name
   image_tag_mutability = "IMMUTABLE"
+  tags = local.tags
 }
 
 module "ecr_initial_image" {
@@ -110,6 +120,8 @@ module "fargate" {
 
   module_depends_on             = [module.alb.alb]
   role_permissions_boundary_arn = module.acs.role_permissions_boundary.arn
+
+  tags = local.tags
 }
 
 module "autoscaling" {
@@ -173,11 +185,23 @@ module "autoscaling" {
       evaluation_periods  = null // use default
     }
   }
+
+  tags = local.tags
 }
 
 resource "aws_route53_record" "a_record" {
   name    = "${var.app_name}.${module.acs.route53_zone.name}"
   type    = "A"
+  zone_id = module.acs.route53_zone.id
+  alias {
+    evaluate_target_health = true
+    name                   = module.alb.alb.dns_name
+    zone_id                = module.alb.alb.zone_id
+  }
+}
+resource "aws_route53_record" "aaaa_record" {
+  name    = "${var.app_name}.${module.acs.route53_zone.name}"
+  type    = "AAAA"
   zone_id = module.acs.route53_zone.id
   alias {
     evaluate_target_health = true
