@@ -29,11 +29,6 @@ variable "container_secrets" {
   description = "Map of secrets from the parameter store to be assigned to an env variable. Defaults to an empty map."
   default     = {}
 }
-variable "task_policies" {
-  type        = list(string)
-  description = "List of IAM Policy ARNs to attach to the task execution policy."
-  default     = []
-}
 variable "min_capacity" {
   type        = number
   description = "Minimum task count. Defaults to 1."

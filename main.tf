@@ -5,12 +5,22 @@ terraform {
   }
 }
 
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
 locals {
   assummed_tags = {
     env = var.env
     data-sensitivity = "confidential"
   }
   tags = merge(local.assummed_tags, var.tags)
+  has_secrets = length(var.container_secrets) > 0
+  ssm_parameter_arn_base = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/"
+
+  secrets_arns = [
+  for key in keys(var.container_secrets) :
+    "${local.ssm_parameter_arn_base}/${replace(lookup(var.container_secrets, key), "/^//", "")}"
+  ]
 }
 
 module "acs" {
@@ -92,6 +102,28 @@ module "ecr_initial_image" {
   docker_image_tag   = formatdate("YYYY-MM-DD_hh-mm", timestamp())
 }
 
+// Make sure the fargate task has access to get the parameters from the container secrets
+data "aws_iam_policy_document" "secrets_access" {
+  count = local.has_secrets ? 1 : 0
+
+  version = "2012-10-17"
+  statement {
+    effect = "Allow"
+    actions = [
+      "ssm:GetParameters",
+      "ssm:GetParameter",
+      "ssm:GetParemetersByPath"
+    ]
+    resources = local.secrets_arns
+  }
+}
+resource "aws_iam_policy" "secrets_access" {
+  count = local.has_secrets ? 1 : 0
+
+  name = "${var.app_name}_secrets_access"
+  policy = data.aws_iam_policy_document.secrets_access[0].json
+}
+
 module "fargate" {
   source              = "git@github.com:byu-oit/terraform-aws-fargate.git?ref=v1.1.0"
   app_name            = var.app_name
@@ -107,7 +139,7 @@ module "fargate" {
   container_image         = module.ecr_initial_image.ecr_image_url
   container_env_variables = var.container_env_variables
   container_secrets       = var.container_secrets
-  task_policies           = var.task_policies
+  task_policies           = local.has_secrets ? [aws_iam_policy.secrets_access[0].arn] : []
 
   blue_green_deployment_config = {
     termination_wait_time_after_deployment_success = null // defaults to 15
