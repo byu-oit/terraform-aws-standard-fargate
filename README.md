@@ -11,7 +11,7 @@ customized solution you may need to use this code more as a pattern or guideline
 ## Usage
 ```hcl
 module "my-app" {
-  source = "git@github.com:byu-oit/terraform-aws-standard-fargate?ref=v0.3.0"
+  source = "git@github.com:byu-oit/terraform-aws-standard-fargate?ref=v1.0.0"
   app_name       = "example-api"
   env            = "dev"
   dockerfile_dir = "docker/"
@@ -59,6 +59,7 @@ module "my-app" {
 | health_check_path | string | Health check path for the image | "/" |
 | container_env_variables | map(string) | Map of environment variables to pass to the container definition | {} |
 | container_secrets | map(string) | Map of secrets from the parameter store to be assigned to env variables. Use `task_policies` to make sure the Task's IAM role has access to the SSM parameters | {} |
+| task_policies | list(string) | List of IAM Policy ARNs to attach to the task execution IAM Policy| [] |
 | min_capacity | number | Minimum task count for autoscaling | 1 |
 | max_capacity | number | Maximum task count for autoscaling | 2 | 
 | tags | map(string) | A map of AWS Tags to attach to each resource created | {} |

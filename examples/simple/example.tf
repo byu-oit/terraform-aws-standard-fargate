@@ -3,13 +3,9 @@ provider "aws" {
   region  = "us-west-2"
 }
 
-data "aws_ecr_repository" "pre_made_repo" {
-  name = "my-cool-repo"
-}
-
 module "fargate_api" {
-//  source         = "git@github.com:byu-oit/terraform-aws-standard-fargate?ref=v0.3.0"
-  source         = "../../" // for local testing
+  source         = "git@github.com:byu-oit/terraform-aws-standard-fargate?ref=v1.0.0"
+//  source         = "../../" // for local testing
   app_name       = "example-api"
   env            = "dev"
   dockerfile_dir = "docker/"

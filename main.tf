@@ -10,22 +10,23 @@ data "aws_region" "current" {}
 
 locals {
   assummed_tags = {
-    env = var.env
+    env              = var.env
     data-sensitivity = "confidential"
   }
-  tags = merge(local.assummed_tags, var.tags)
-  has_secrets = length(var.container_secrets) > 0
+  tags                   = merge(local.assummed_tags, var.tags)
+  has_secrets            = length(var.container_secrets) > 0
   ssm_parameter_arn_base = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/"
 
   secrets_arns = [
-  for key in keys(var.container_secrets) :
-    "${local.ssm_parameter_arn_base}/${replace(lookup(var.container_secrets, key), "/^//", "")}"
+    for key in keys(var.container_secrets) :
+    "${local.ssm_parameter_arn_base}${replace(lookup(var.container_secrets, key), "/^//", "")}"
   ]
 }
 
 module "acs" {
-  source = "git@github.com:byu-oit/terraform-aws-acs-info.git?ref=v1.2.0"
-  env    = var.env
+  source            = "git@github.com:byu-oit/terraform-aws-acs-info.git?ref=v1.2.0"
+  env               = var.env
+  vpc_vpn_to_campus = var.vpn_to_campus
 }
 
 module "alb" {
@@ -88,20 +89,6 @@ module "alb" {
   tags = local.tags
 }
 
-module "ecr" {
-  source               = "git@github.com:byu-oit/terraform-aws-ecr?ref=v1.0.0"
-  name                 = var.app_name
-  image_tag_mutability = "IMMUTABLE"
-  tags = local.tags
-}
-
-module "ecr_initial_image" {
-  source             = "git@github.com:byu-oit/terraform-aws-ecr-image?ref=v1.0.0"
-  dockerfile_dir     = var.dockerfile_dir
-  ecr_repository_url = module.ecr.repository.repository_url
-  docker_image_tag   = formatdate("YYYY-MM-DD_hh-mm", timestamp())
-}
-
 // Make sure the fargate task has access to get the parameters from the container secrets
 data "aws_iam_policy_document" "secrets_access" {
   count = local.has_secrets ? 1 : 0
@@ -120,39 +107,46 @@ data "aws_iam_policy_document" "secrets_access" {
 resource "aws_iam_policy" "secrets_access" {
   count = local.has_secrets ? 1 : 0
 
-  name = "${var.app_name}_secrets_access"
+  name   = "${var.app_name}_secrets_access"
   policy = data.aws_iam_policy_document.secrets_access[0].json
 }
 
 module "fargate" {
-  source              = "git@github.com:byu-oit/terraform-aws-fargate.git?ref=v1.1.0"
+//  source              = "../terraform-aws-fargate"
+  source              = "git@github.com:byu-oit/terraform-aws-fargate.git?ref=v1.2.2"
   app_name            = var.app_name
   vpc_id              = module.acs.vpc.id
   subnet_ids          = module.acs.private_subnet_ids
   load_balancer_sg_id = module.alb.alb_security_group.id
+  security_groups     = var.security_groups
   target_groups = [
     {
       arn  = module.alb.target_groups["blue"].arn
       port = module.alb.target_groups["blue"].port
     }
   ]
-  container_image         = module.ecr_initial_image.ecr_image_url
+  task_cpu                = var.task_cpu
+  task_memory             = var.task_memory
+  container_image         = var.container_url
   container_env_variables = var.container_env_variables
   container_secrets       = var.container_secrets
-  task_policies           = local.has_secrets ? [aws_iam_policy.secrets_access[0].arn] : []
-
+  task_policies           = length(aws_iam_policy.secrets_access) > 0 ? [aws_iam_policy.secrets_access[0].arn] : []
+  task_execution_policies = length(aws_iam_policy.secrets_access) > 0 ? [aws_iam_policy.secrets_access[0].arn] : []
   blue_green_deployment_config = {
     termination_wait_time_after_deployment_success = null // defaults to 15
     prod_traffic_listener_arns                     = [module.alb.listeners[443].arn]
     test_traffic_listener_arns                     = []
-    blue_target_group_name                         = module.alb.target_groups["blue"].name
-    green_target_group_name                        = module.alb.target_groups["green"].name
+    //Note: The `lookup` is used because there have been cases where it can't find the map value when trying to destroy
+    //and that caused the destroy to fail
+    blue_target_group_name                         = lookup(module.alb.target_groups, "blue", null) != null ? module.alb.target_groups["blue"].name : null
+    green_target_group_name                        = lookup(module.alb.target_groups, "green", null) != null ? module.alb.target_groups["green"].name : null
     service_role_arn                               = module.acs.power_builder_role.arn
   }
 
   module_depends_on             = [module.alb.alb]
   role_permissions_boundary_arn = module.acs.role_permissions_boundary.arn
-
+  log_retention_in_days = var.log_retention_in_days
+  health_check_grace_period = var.health_check_grace_period
   tags = local.tags
 }
 
