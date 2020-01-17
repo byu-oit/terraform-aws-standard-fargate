@@ -6,10 +6,7 @@ variable "env" {
   type        = string
   description = "Environment of the AWS Account (e.g. dev, prd)"
 }
-variable "dockerfile_dir" {
-  type        = string
-  description = "The directory that contains the Dockerfile"
-}
+
 variable "image_port" {
   type        = number
   description = "The port the docker image is listening on"
@@ -45,7 +42,41 @@ variable "max_capacity" {
   default     = 2
 }
 variable "tags" {
-  type = map(string)
+  type        = map(string)
   description = "A map of AWS Tags to attach to each resource created"
-  default = {}
+  default     = {}
+}
+variable "container_image_url" {
+  type        = string
+  description = "URL to Docker container image"
+}
+variable "task_cpu" {
+  type        = number
+  description = "CPU for the task definition. Defaults to 256."
+  default     = 256
+}
+variable "task_memory" {
+  type        = number
+  description = "Memory for the task definition. Defaults to 512."
+  default     = 512
+}
+variable "security_groups" {
+  type        = list(string)
+  description = "Extra security groups"
+  default     = []
+}
+variable "vpn_to_campus" {
+  type        = bool
+  description = "Do the Fargate tasks need to run in the VPC that has a VPN back to campus?"
+  default     = false
+}
+variable "log_retention_in_days" {
+  type        = number
+  description = "CloudWatch log group retention in days. Defaults to 7."
+  default     = 7
+}
+variable "health_check_grace_period" {
+  type        = number
+  description = "Health check grace period in seconds. Defaults to 0."
+  default     = 0
 }
