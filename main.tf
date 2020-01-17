@@ -112,7 +112,7 @@ resource "aws_iam_policy" "secrets_access" {
 }
 
 module "fargate" {
-//  source              = "../terraform-aws-fargate"
+  //  source              = "../terraform-aws-fargate"
   source              = "git@github.com:byu-oit/terraform-aws-fargate.git?ref=v1.2.2"
   app_name            = var.app_name
   vpc_id              = module.acs.vpc.id
@@ -138,16 +138,16 @@ module "fargate" {
     test_traffic_listener_arns                     = []
     //Note: The `lookup` is used because there have been cases where it can't find the map value when trying to destroy
     //and that caused the destroy to fail
-    blue_target_group_name                         = lookup(module.alb.target_groups, "blue", null) != null ? module.alb.target_groups["blue"].name : null
-    green_target_group_name                        = lookup(module.alb.target_groups, "green", null) != null ? module.alb.target_groups["green"].name : null
-    service_role_arn                               = module.acs.power_builder_role.arn
+    blue_target_group_name  = lookup(module.alb.target_groups, "blue", null) != null ? module.alb.target_groups["blue"].name : null
+    green_target_group_name = lookup(module.alb.target_groups, "green", null) != null ? module.alb.target_groups["green"].name : null
+    service_role_arn        = module.acs.power_builder_role.arn
   }
 
   module_depends_on             = [module.alb.alb]
   role_permissions_boundary_arn = module.acs.role_permissions_boundary.arn
-  log_retention_in_days = var.log_retention_in_days
-  health_check_grace_period = var.health_check_grace_period
-  tags = local.tags
+  log_retention_in_days         = var.log_retention_in_days
+  health_check_grace_period     = var.health_check_grace_period
+  tags                          = local.tags
 }
 
 module "autoscaling" {
