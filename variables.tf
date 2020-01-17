@@ -42,12 +42,13 @@ variable "max_capacity" {
   default     = 2
 }
 variable "tags" {
-  type = map(string)
+  type        = map(string)
   description = "A map of AWS Tags to attach to each resource created"
-  default = {}
+  default     = {}
 }
-variable "container_url" {
-  type = string
+variable "container_image_url" {
+  type        = string
+  description = "URL to Docker container image"
 }
 variable "task_cpu" {
   type        = number
@@ -60,18 +61,19 @@ variable "task_memory" {
   default     = 512
 }
 variable "security_groups" {
-  type = list(string)
+  type        = list(string)
   description = "Extra security groups"
-  default = []
+  default     = []
 }
 variable "vpn_to_campus" {
-  type = bool
-  description = "VPN to Campus"
-  default = false
+  type        = bool
+  description = "Do the Fargate tasks need to run in the VPC that has a VPN back to campus?"
+  default     = false
 }
 variable "log_retention_in_days" {
-  type = number
-  default = 7
+  type        = number
+  description = "CloudWatch log group retention in days. Defaults to 7."
+  default     = 7
 }
 variable "health_check_grace_period" {
   type        = number

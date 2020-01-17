@@ -127,10 +127,10 @@ module "fargate" {
   ]
   task_cpu                = var.task_cpu
   task_memory             = var.task_memory
-  container_image         = var.container_url
+  container_image         = var.container_image_url
   container_env_variables = var.container_env_variables
   container_secrets       = var.container_secrets
-  task_policies           = length(aws_iam_policy.secrets_access) > 0 ? [aws_iam_policy.secrets_access[0].arn] : []
+  task_policies           = concat(length(aws_iam_policy.secrets_access) > 0 ? [aws_iam_policy.secrets_access[0].arn] : [], var.task_policies)
   task_execution_policies = length(aws_iam_policy.secrets_access) > 0 ? [aws_iam_policy.secrets_access[0].arn] : []
   blue_green_deployment_config = {
     termination_wait_time_after_deployment_success = null // defaults to 15
