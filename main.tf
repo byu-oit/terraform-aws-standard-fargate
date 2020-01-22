@@ -24,13 +24,13 @@ locals {
 }
 
 module "acs" {
-  source            = "git@github.com:byu-oit/terraform-aws-acs-info.git?ref=v1.2.0"
+  source            = "github.com/byu-oit/terraform-aws-acs-info?ref=v1.2.1"
   env               = var.env
   vpc_vpn_to_campus = var.vpn_to_campus
 }
 
 module "alb" {
-  source     = "git@github.com:byu-oit/terraform-aws-alb.git?ref=v1.2.0"
+  source     = "github.com/byu-oit/terraform-aws-alb?ref=v1.2.1"
   name       = "${var.app_name}-alb"
   vpc_id     = module.acs.vpc.id
   subnet_ids = module.acs.public_subnet_ids
@@ -113,7 +113,7 @@ resource "aws_iam_policy" "secrets_access" {
 
 module "fargate" {
   //  source              = "../terraform-aws-fargate"
-  source              = "git@github.com:byu-oit/terraform-aws-fargate.git?ref=v1.2.2"
+  source              = "github.com/byu-oit/terraform-aws-fargate?ref=v1.2.3"
   app_name            = var.app_name
   vpc_id              = module.acs.vpc.id
   subnet_ids          = module.acs.private_subnet_ids
@@ -151,7 +151,7 @@ module "fargate" {
 }
 
 module "autoscaling" {
-  source             = "git@github.com:byu-oit/terraform-aws-app-autoscaling.git?ref=v1.0.0"
+  source             = "github.com/byu-oit/terraform-aws-app-autoscaling?ref=v1.0.1"
   app_name           = var.app_name
   min_capacity       = var.min_capacity
   max_capacity       = var.max_capacity
