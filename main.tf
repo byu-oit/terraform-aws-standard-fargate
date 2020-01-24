@@ -14,8 +14,9 @@ locals {
 }
 
 module "acs" {
-  source = "git@github.com:byu-oit/terraform-aws-acs-info.git?ref=v1.2.0"
-  env    = var.env
+  source = "git@github.com:byu-oit/terraform-aws-acs-info.git?ref=test"
+  env    = ""
+  dept_abbr = "trn"
 }
 
 module "alb" {
