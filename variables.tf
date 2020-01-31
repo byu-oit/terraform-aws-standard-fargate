@@ -7,6 +7,10 @@ variable "env" {
   description = "Environment of the AWS Account (e.g. dev, prd)"
 }
 
+variable "container_image_url" {
+  type        = string
+  description = "URL to Docker container image"
+}
 variable "image_port" {
   type        = number
   description = "The port the docker image is listening on"
@@ -15,6 +19,11 @@ variable "health_check_path" {
   type        = string
   description = "Health check path for the image. Defaults to \"/\"."
   default     = "/"
+}
+variable "health_check_grace_period" {
+  type        = number
+  description = "Health check grace period in seconds. Defaults to 0."
+  default     = 0
 }
 variable "container_env_variables" {
   type        = map(string)
@@ -31,25 +40,6 @@ variable "task_policies" {
   description = "List of IAM Policy ARNs to attach to the task execution policy."
   default     = []
 }
-variable "min_capacity" {
-  type        = number
-  description = "Minimum task count. Defaults to 1."
-  default     = 1
-}
-variable "max_capacity" {
-  type        = number
-  description = "Maximum task count. Defaults to 2."
-  default     = 2
-}
-variable "tags" {
-  type        = map(string)
-  description = "A map of AWS Tags to attach to each resource created"
-  default     = {}
-}
-variable "container_image_url" {
-  type        = string
-  description = "URL to Docker container image"
-}
 variable "task_cpu" {
   type        = number
   description = "CPU for the task definition. Defaults to 256."
@@ -62,21 +52,31 @@ variable "task_memory" {
 }
 variable "security_groups" {
   type        = list(string)
-  description = "Extra security groups"
+  description = "List of extra security group IDs to attach to the fargate task."
   default     = []
 }
 variable "vpn_to_campus" {
   type        = bool
-  description = "Do the Fargate tasks need to run in the VPC that has a VPN back to campus?"
+  description = "Do the Fargate tasks need to run in the VPC that has a VPN back to campus? Defaults to false."
   default     = false
+}
+variable "min_capacity" {
+  type        = number
+  description = "Minimum task count. Defaults to 1."
+  default     = 1
+}
+variable "max_capacity" {
+  type        = number
+  description = "Maximum task count. Defaults to 2."
+  default     = 2
 }
 variable "log_retention_in_days" {
   type        = number
   description = "CloudWatch log group retention in days. Defaults to 7."
   default     = 7
 }
-variable "health_check_grace_period" {
-  type        = number
-  description = "Health check grace period in seconds. Defaults to 0."
-  default     = 0
+variable "tags" {
+  type        = map(string)
+  description = "A map of AWS Tags to attach to each resource created"
+  default     = {}
 }

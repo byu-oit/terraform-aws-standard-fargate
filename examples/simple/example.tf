@@ -4,7 +4,7 @@ provider "aws" {
 }
 
 module "fargate_api" {
-  source         = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v1.0.1"
+  source         = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v1.0.2"
 //  source         = "../../" // for local testing
   app_name       = "example-api"
   env            = "dev"
