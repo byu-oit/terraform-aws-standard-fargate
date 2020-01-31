@@ -4,11 +4,11 @@ provider "aws" {
 }
 
 module "fargate_api" {
-  source         = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v1.0.1"
+  source         = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v1.0.2"
 //  source         = "../../" // for local testing
   app_name       = "example-api"
   env            = "dev"
-  dockerfile_dir = "docker/"
+  container_image_url = "crccheck/hello-world"
   image_port     = 8000
   tags = {
     env              = "dev"
