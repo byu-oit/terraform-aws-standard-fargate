@@ -8,7 +8,7 @@ module "fargate_api" {
 //  source         = "../../" // for local testing
   app_name       = "example-api"
   env            = "dev"
-  dockerfile_dir = "docker/"
+  container_image_url = "crccheck/hello-world"
   image_port     = 8000
   tags = {
     env              = "dev"
