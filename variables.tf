@@ -1,6 +1,6 @@
 variable "app_name" {
   type        = string
-  description = "Application name to name your Fargate API and other resources"
+  description = "Application name to name your Fargate API and other resources. Must be <= 24 characters."
 }
 variable "dept_abbr" {
   type = string
@@ -84,4 +84,24 @@ variable "tags" {
   type        = map(string)
   description = "A map of AWS Tags to attach to each resource created"
   default     = {}
+}
+
+variable "vpc_id" {
+  type = string
+}
+variable "public_subnet_ids" {
+  type = list(string)
+}
+variable "target_group_deregistration_delay" {
+  type = number
+  default = 60
+}
+variable "hosted_zone" {
+  type = object({
+    name = string,
+    id = string
+  })
+}
+variable "https_certificate_arn" {
+  type = string
 }
