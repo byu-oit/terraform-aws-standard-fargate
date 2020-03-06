@@ -9,6 +9,13 @@ module "acs" {
   dept_abbr = "ces"
 }
 
+module "container_def" {
+  source = "github.com/byu-oit/terraform-aws-container-definition-helper?ref=v0.1.1"
+  image  = "crccheck/hello-world"
+  name   = "example"
+  ports  = [8000]
+}
+
 module "fargate_api" {
 //  source         = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.0"
   source         = "../../" // for local testing
@@ -16,11 +23,13 @@ module "fargate_api" {
   env            = "dev"
   container_image_url = "crccheck/hello-world"
   image_port     = 8000
+  container_definitions = "[${module.container_def.json}]"
 
   hosted_zone = module.acs.route53_zone
   https_certificate_arn = module.acs.certificate.arn
   public_subnet_ids = module.acs.public_subnet_ids
   vpc_id = module.acs.vpc.id
+  role_permissions_boundary_arn = module.acs.role_permissions_boundary.arn
 
   tags = {
     env              = "dev"

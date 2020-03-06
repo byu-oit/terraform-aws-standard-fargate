@@ -105,3 +105,9 @@ variable "hosted_zone" {
 variable "https_certificate_arn" {
   type = string
 }
+variable "role_permissions_boundary_arn" {
+  type = string
+}
+variable "container_definitions" {
+  type = string
+}
