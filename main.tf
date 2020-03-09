@@ -145,7 +145,7 @@ resource "aws_route53_record" "aaaa_record" {
   }
 }
 
-# ==================== Fargate ====================
+# ==================== Task Definition ====================
 # --- task execution role ---
 data "aws_iam_policy_document" "task_execution_policy" {
   version = "2012-10-17"
@@ -194,7 +194,7 @@ resource "aws_iam_role_policy_attachment" "secrest_policy_attach" {
   policy_arn = aws_iam_policy.secrets_access[0].arn
   role       = aws_iam_role.task_execution_role.name
 }
-# --- task role
+# --- task role ---
 data "aws_iam_policy_document" "task_policy" {
   version = "2012-10-17"
   statement {
@@ -222,7 +222,7 @@ resource "aws_iam_role_policy_attachment" "secret_task_policy_attach" {
   policy_arn = aws_iam_policy.secrets_access[0].arn
   role       = aws_iam_role.task_role.name
 }
-
+# --- task definition ---
 resource "aws_ecs_task_definition" "task_def" {
   container_definitions = var.container_definitions
   family = "${var.app_name}-def"
@@ -236,48 +236,147 @@ resource "aws_ecs_task_definition" "task_def" {
   tags = var.tags
 }
 
+# ==================== Fargate ====================
+resource "aws_ecs_cluster" "cluster" {
+  name = var.app_name
+  tags = var.tags
+}
+resource "aws_security_group" "fargate_service_sg" {
+  name = "${var.app_name}-fargate-sg"
+  description = "Controls access to the Fargate Service"
+  vpc_id = var.vpc_id
 
+  ingress {
+    from_port = 0
+    to_port = 65535
+    protocol = "tcp"
+    security_groups = [aws_security_group.alb-sg.id]
+  }
+  egress {
+    from_port = 0
+    to_port = 0
+    protocol = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  tags = var.tags
+}
+resource "aws_ecs_service" "service" {
+  name = var.app_name
+  task_definition = aws_ecs_task_definition.task_def.arn
+  cluster = aws_ecs_cluster.cluster.id
+  desired_count = var.min_capacity
+  launch_type = "FARGATE"
+  deployment_controller {
+    type = "CODE_DEPLOY"
+  }
+  network_configuration {
+    subnets = var.private_subnet_ids
+    security_groups = [aws_security_group.fargate_service_sg.id]
+    assign_public_ip = true
+  }
 
-//
-//module "fargate" {
-//  //  source              = "../terraform-aws-fargate"
-//  source              = "github.com/byu-oit/terraform-aws-fargate?ref=v1.2.3"
-//  app_name            = var.app_name
-//  vpc_id              = module.acs.vpc.id
-//  subnet_ids          = module.acs.private_subnet_ids
-//  load_balancer_sg_id = module.alb.alb_security_group.id
-//  security_groups     = var.security_groups
-//  target_groups = [
-//    {
-//      arn  = module.alb.target_groups["blue"].arn
-//      port = module.alb.target_groups["blue"].port
-//    }
-//  ]
-//  task_cpu                = var.task_cpu
-//  task_memory             = var.task_memory
-//  container_image         = var.container_image_url
-//  container_env_variables = var.container_env_variables
-//  container_secrets       = var.container_secrets
-//  task_policies           = concat(length(aws_iam_policy.secrets_access) > 0 ? [aws_iam_policy.secrets_access[0].arn] : [], var.task_policies)
-//  task_execution_policies = length(aws_iam_policy.secrets_access) > 0 ? [aws_iam_policy.secrets_access[0].arn] : []
-//  blue_green_deployment_config = {
-//    termination_wait_time_after_deployment_success = null // defaults to 15
-//    prod_traffic_listener_arns                     = [module.alb.listeners[443].arn]
-//    test_traffic_listener_arns                     = []
-//    //Note: The `lookup` is used because there have been cases where it can't find the map value when trying to destroy
-//    //and that caused the destroy to fail
-//    blue_target_group_name  = lookup(module.alb.target_groups, "blue", null) != null ? module.alb.target_groups["blue"].name : null
-//    green_target_group_name = lookup(module.alb.target_groups, "green", null) != null ? module.alb.target_groups["green"].name : null
-//    service_role_arn        = module.acs.power_builder_role.arn
+  load_balancer {
+    target_group_arn = aws_alb_target_group.blue.arn
+    container_name = var.container_name
+    container_port = var.image_port
+  }
+//  load_balancer {
+//    target_group_arn = aws_alb_target_group.green.arn
+//    container_name = var.container_name
+//    container_port = var.image_port
 //  }
-//
-//  module_depends_on             = [module.alb.alb]
-//  role_permissions_boundary_arn = module.acs.role_permissions_boundary.arn
-//  log_retention_in_days         = var.log_retention_in_days
-//  health_check_grace_period     = var.health_check_grace_period
-//  tags                          = local.tags
-//}
-//
+
+  health_check_grace_period_seconds = var.health_check_grace_period
+
+  tags = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      task_definition, // ignore because new revisions will get added after code deploy's blue-green deployment
+      load_balancer,   // ignore because load balancer can change after code deploy's blue-green deployment
+      desired_count    // igrnore because we're assuming you have autoscaling to manage the container count
+    ]
+  }
+}
+
+# ==================== CodeDeploy ====================
+resource "aws_codedeploy_app" "app" {
+  name             = "${var.app_name}-codedeploy"
+  compute_platform = "ECS"
+}
+data "aws_iam_policy_document" "codedeploy_policy" {
+  version = "2012-10-17"
+  statement {
+    effect = "Allow"
+    principals {
+      identifiers = ["codedeploy.amazonaws.com"]
+      type = "Service"
+    }
+    actions = ["sts:AssumeRole"]
+  }
+}
+resource "aws_iam_role" "codedeploy_role" {
+  name                 = "${var.app_name}-codedeploy-role"
+  permissions_boundary = var.role_permissions_boundary_arn
+  assume_role_policy   = data.aws_iam_policy_document.codedeploy_policy.json
+}
+
+resource "aws_iam_role_policy_attachment" "AWSCodeDeployRole" {
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole"
+  role       = aws_iam_role.codedeploy_role.name
+}
+
+resource "aws_codedeploy_deployment_group" "deploymentgroup" {
+ app_name               = aws_codedeploy_app.app.name
+  deployment_group_name  = "${var.app_name}-deployment-group"
+  service_role_arn       = var.codedeploy_iam_role_arn
+  deployment_config_name = "CodeDeployDefault.ECSAllAtOnce"
+
+  ecs_service {
+    cluster_name = aws_ecs_cluster.cluster.name
+    service_name = aws_ecs_service.service.name
+  }
+
+  blue_green_deployment_config {
+    deployment_ready_option {
+      action_on_timeout = "CONTINUE_DEPLOYMENT"
+    }
+    terminate_blue_instances_on_deployment_success {
+      action                           = "TERMINATE"
+      termination_wait_time_in_minutes = 15
+    }
+  }
+
+  deployment_style {
+    deployment_option = "WITH_TRAFFIC_CONTROL"
+    deployment_type   = "BLUE_GREEN"
+  }
+  auto_rollback_configuration {
+    enabled = true
+    events  = ["DEPLOYMENT_FAILURE"]
+  }
+
+  load_balancer_info {
+    target_group_pair_info {
+      prod_traffic_route {
+        listener_arns = [aws_alb_listener.https.arn]
+      }
+//      TODO test listener traffic
+//      test_traffic_route {
+//        listener_arns = aws_alb_listener.....
+//      }
+      target_group {
+        name = aws_alb_target_group.blue.name
+      }
+      target_group {
+        name = aws_alb_target_group.green.name
+      }
+    }
+  }
+
+  lifecycle { ignore_changes = [blue_green_deployment_config] }
+}
+
 //module "autoscaling" {
 //  source             = "github.com/byu-oit/terraform-aws-app-autoscaling?ref=v1.0.1"
 //  app_name           = var.app_name

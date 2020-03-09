@@ -23,13 +23,16 @@ module "fargate_api" {
   env            = "dev"
   container_image_url = "crccheck/hello-world"
   image_port     = 8000
+  container_name = "example"
   container_definitions = "[${module.container_def.json}]"
 
   hosted_zone = module.acs.route53_zone
   https_certificate_arn = module.acs.certificate.arn
   public_subnet_ids = module.acs.public_subnet_ids
+  private_subnet_ids = module.acs.private_subnet_ids
   vpc_id = module.acs.vpc.id
   role_permissions_boundary_arn = module.acs.role_permissions_boundary.arn
+  codedeploy_iam_role_arn = module.acs.power_builder_role.arn
 
   tags = {
     env              = "dev"

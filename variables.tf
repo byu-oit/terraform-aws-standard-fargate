@@ -92,6 +92,9 @@ variable "vpc_id" {
 variable "public_subnet_ids" {
   type = list(string)
 }
+variable "private_subnet_ids" {
+  type = list(string)
+}
 variable "target_group_deregistration_delay" {
   type = number
   default = 60
@@ -109,5 +112,11 @@ variable "role_permissions_boundary_arn" {
   type = string
 }
 variable "container_definitions" {
+  type = string
+}
+variable "container_name" {
+  type = string
+}
+variable "codedeploy_iam_role_arn" {
   type = string
 }
