@@ -2,20 +2,16 @@ variable "app_name" {
   type        = string
   description = "Application name to name your Fargate API and other resources. Must be <= 24 characters."
 }
-variable "dept_abbr" {
-  type = string
-  default = "oit"
-  description = "Abbreviation of the department type of account (e.g. oit, trn), defaults to oit."
+variable "container_definitions" {
+  type = list(object({
+    name = string
+    image = string
+    ports = list(number)
+    environment_variables = map(string)
+    secrets = map(string)
+  }))
+  description = "A list of container definitions. The first container definition should be your main container."
 }
-variable "env" {
-  type        = string
-  description = "Environment of the AWS Account (e.g. dev, prd)"
-}
-
-//variable "container_image_url" {
-//  type        = string
-//  description = "URL to Docker container image"
-//}
 variable "image_port" {
   type        = number
   description = "The port the docker image is listening on"
@@ -30,16 +26,6 @@ variable "health_check_grace_period" {
   description = "Health check grace period in seconds. Defaults to 0."
   default     = 0
 }
-//variable "container_env_variables" {
-//  type        = map(string)
-//  description = "Map of environment variables to pass to the container definition. Defaults to an empty map."
-//  default     = {}
-//}
-//variable "container_secrets" {
-//  type        = map(string)
-//  description = "Map of secrets from the parameter store to be assigned to an env variable. Defaults to an empty map."
-//  default     = {}
-//}
 variable "task_policies" {
   type        = list(string)
   description = "List of IAM Policy ARNs to attach to the task execution policy."
@@ -60,22 +46,50 @@ variable "security_groups" {
   description = "List of extra security group IDs to attach to the fargate task."
   default     = []
 }
-variable "vpn_to_campus" {
-  type        = bool
-  description = "Do the Fargate tasks need to run in the VPC that has a VPN back to campus? Defaults to false."
-  default     = false
+
+variable "vpc_id" {
+  type = string
+  description = "VPC ID to deploy ECS fargate service."
 }
-// TODO add autoscaling to module?
-//variable "min_capacity" {
-//  type        = number
-//  description = "Minimum task count. Defaults to 1."
-//  default     = 1
-//}
-//variable "max_capacity" {
-//  type        = number
-//  description = "Maximum task count. Defaults to 2."
-//  default     = 2
-//}
+
+variable "public_subnet_ids" {
+  type = list(string)
+  description = "List of subnet IDs for the ALB."
+}
+variable "private_subnet_ids" {
+  type = list(string)
+  description = "List of subnet IDs for the fargate service."
+}
+variable "role_permissions_boundary_arn" {
+  type = string
+  description = "ARN of the IAM Role permissions boundary to place on each IAM role created."
+}
+variable "target_group_deregistration_delay" {
+  type = number
+  description = "Deregistration delay in seconds for ALB target groups. Defaults to 60 seconds."
+  default = 60
+}
+variable "hosted_zone" {
+  type = object({
+    name = string,
+    id = string
+  })
+  description = "Hosted Zone object to redirect to ALB. (Can pass in the aws_hosted_zone object). A and AAAA records created in this hosted zone."
+}
+variable "https_certificate_arn" {
+  type = string
+  description = "ARN of the HTTPS certificate of the hosted zone/domain."
+}
+variable "min_capacity" {
+  type        = number
+  description = "Minimum task count. Defaults to 1."
+  default     = 1
+}
+variable "max_capacity" {
+  type        = number
+  description = "Maximum task count. Defaults to 2."
+  default     = 2
+}
 variable "log_retention_in_days" {
   type        = number
   description = "CloudWatch log group retention in days. Defaults to 7."
@@ -85,42 +99,4 @@ variable "tags" {
   type        = map(string)
   description = "A map of AWS Tags to attach to each resource created"
   default     = {}
-}
-
-variable "vpc_id" {
-  type = string
-}
-variable "public_subnet_ids" {
-  type = list(string)
-}
-variable "private_subnet_ids" {
-  type = list(string)
-}
-variable "target_group_deregistration_delay" {
-  type = number
-  default = 60
-}
-variable "hosted_zone" {
-  type = object({
-    name = string,
-    id = string
-  })
-}
-variable "https_certificate_arn" {
-  type = string
-}
-variable "role_permissions_boundary_arn" {
-  type = string
-}
-variable "codedeploy_iam_role_arn" {
-  type = string
-}
-variable "container_definitions" {
-  type = list(object({
-    name = string
-    image = string
-    ports = list(number)
-    environment_variables = map(string)
-    secrets = map(string)
-  }))
 }

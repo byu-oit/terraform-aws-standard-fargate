@@ -11,7 +11,7 @@ customized solution you may need to use this code more as a pattern or guideline
 ## Usage
 ```hcl
 module "my-app" {
-  source = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v1.0.2"
+  source = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.0"
   app_name       = "example-api"
   env            = "dev"
   dockerfile_dir = "docker/"

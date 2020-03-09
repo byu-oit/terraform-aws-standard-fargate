@@ -14,10 +14,8 @@ locals {
     for def in var.container_definitions :
       values(def.secrets)
   ]))
-
   has_secrets            = length(local.ssm_parameters) > 0
   ssm_parameter_arn_base = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/"
-
   secrets_arns = [
     for param in local.ssm_parameters :
     "${local.ssm_parameter_arn_base}${replace(param, "/^//", "")}"
@@ -377,7 +375,7 @@ resource "aws_iam_role_policy_attachment" "AWSCodeDeployRole" {
 resource "aws_codedeploy_deployment_group" "deploymentgroup" {
  app_name               = aws_codedeploy_app.app.name
   deployment_group_name  = "${var.app_name}-deployment-group"
-  service_role_arn       = var.codedeploy_iam_role_arn
+  service_role_arn       = aws_iam_role.codedeploy_role.arn
   deployment_config_name = "CodeDeployDefault.ECSAllAtOnce"
 
   ecs_service {
@@ -429,7 +427,81 @@ resource "aws_codedeploy_deployment_group" "deploymentgroup" {
 resource "aws_cloudwatch_log_group" "container_log_group" {
   name              = local.cloudwatch_log_group_name
   retention_in_days = var.log_retention_in_days
+  tags = var.tags
+}
 
+# ==================== AutoScaling ====================
+resource "aws_appautoscaling_target" "main" {
+  min_capacity = var.min_capacity
+  max_capacity = var.max_capacity
+  resource_id = "service/${aws_ecs_cluster.cluster.name}/${aws_ecs_service.service.name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace = "ecs"
+}
+resource "aws_appautoscaling_policy" "up" {
+  name = "${var.app_name}-autoscale-up"
+  resource_id = aws_appautoscaling_target.main.resource_id
+  scalable_dimension = aws_appautoscaling_target.main.scalable_dimension
+  service_namespace = aws_appautoscaling_target.main.service_namespace
+
+  step_scaling_policy_configuration {
+    adjustment_type = "ChangeInCapacity"
+    metric_aggregation_type = "Average"
+    cooldown = 300
+
+    step_adjustment {
+      scaling_adjustment = 1
+      metric_interval_lower_bound = 0
+    }
+  }
+}
+resource "aws_cloudwatch_metric_alarm" "up" {
+  alarm_name = "${var.app_name}-alarm-up"
+  namespace = "AWS/ECS"
+  dimensions = {
+    ClusterName = aws_ecs_cluster.cluster.name
+    ServiceName = aws_ecs_service.service.name
+  }
+  statistic = "Average"
+  metric_name = "CPUUtilization"
+  comparison_operator = "GreaterThanThreshold"
+  threshold = 75
+  period = 300
+  evaluation_periods = 5
+  alarm_actions = [aws_appautoscaling_policy.up.arn]
+  tags = var.tags
+}
+resource "aws_appautoscaling_policy" "down" {
+  name = "${var.app_name}-autoscale-down"
+  resource_id = aws_appautoscaling_target.main.resource_id
+  scalable_dimension = aws_appautoscaling_target.main.scalable_dimension
+  service_namespace = aws_appautoscaling_target.main.service_namespace
+
+  step_scaling_policy_configuration {
+    adjustment_type = "ChangeInCapacity"
+    metric_aggregation_type = "Average"
+    cooldown = 300
+
+    step_adjustment {
+      scaling_adjustment = -1
+      metric_interval_upper_bound = 0
+    }
+  }
+}
+resource "aws_cloudwatch_metric_alarm" "down" {
+  alarm_name = "${var.app_name}-alarm-down"
+  namespace = "AWS/ECS"
+  dimensions = {
+    ClusterName = aws_ecs_cluster.cluster.name
+    ServiceName = aws_ecs_service.service.name
+  }
+  statistic = "Average"
+  metric_name = "CPUUtilization"
+  comparison_operator = "LessThanThreshold"
+  threshold = 25
+  period = 300
+  evaluation_periods = 5
+  alarm_actions = [aws_appautoscaling_policy.down.arn]
   tags = var.tags
 }
 
