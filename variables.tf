@@ -12,10 +12,10 @@ variable "env" {
   description = "Environment of the AWS Account (e.g. dev, prd)"
 }
 
-variable "container_image_url" {
-  type        = string
-  description = "URL to Docker container image"
-}
+//variable "container_image_url" {
+//  type        = string
+//  description = "URL to Docker container image"
+//}
 variable "image_port" {
   type        = number
   description = "The port the docker image is listening on"
@@ -30,16 +30,16 @@ variable "health_check_grace_period" {
   description = "Health check grace period in seconds. Defaults to 0."
   default     = 0
 }
-variable "container_env_variables" {
-  type        = map(string)
-  description = "Map of environment variables to pass to the container definition. Defaults to an empty map."
-  default     = {}
-}
-variable "container_secrets" {
-  type        = map(string)
-  description = "Map of secrets from the parameter store to be assigned to an env variable. Defaults to an empty map."
-  default     = {}
-}
+//variable "container_env_variables" {
+//  type        = map(string)
+//  description = "Map of environment variables to pass to the container definition. Defaults to an empty map."
+//  default     = {}
+//}
+//variable "container_secrets" {
+//  type        = map(string)
+//  description = "Map of secrets from the parameter store to be assigned to an env variable. Defaults to an empty map."
+//  default     = {}
+//}
 variable "task_policies" {
   type        = list(string)
   description = "List of IAM Policy ARNs to attach to the task execution policy."
@@ -65,16 +65,17 @@ variable "vpn_to_campus" {
   description = "Do the Fargate tasks need to run in the VPC that has a VPN back to campus? Defaults to false."
   default     = false
 }
-variable "min_capacity" {
-  type        = number
-  description = "Minimum task count. Defaults to 1."
-  default     = 1
-}
-variable "max_capacity" {
-  type        = number
-  description = "Maximum task count. Defaults to 2."
-  default     = 2
-}
+// TODO add autoscaling to module?
+//variable "min_capacity" {
+//  type        = number
+//  description = "Minimum task count. Defaults to 1."
+//  default     = 1
+//}
+//variable "max_capacity" {
+//  type        = number
+//  description = "Maximum task count. Defaults to 2."
+//  default     = 2
+//}
 variable "log_retention_in_days" {
   type        = number
   description = "CloudWatch log group retention in days. Defaults to 7."
@@ -111,12 +112,15 @@ variable "https_certificate_arn" {
 variable "role_permissions_boundary_arn" {
   type = string
 }
-variable "container_definitions" {
-  type = string
-}
-variable "container_name" {
-  type = string
-}
 variable "codedeploy_iam_role_arn" {
   type = string
+}
+variable "container_definitions" {
+  type = list(object({
+    name = string
+    image = string
+    ports = list(number)
+    environment_variables = map(string)
+    secrets = map(string)
+  }))
 }

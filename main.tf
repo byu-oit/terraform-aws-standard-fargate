@@ -9,16 +9,64 @@ data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
 locals {
-  has_secrets            = length(var.container_secrets) > 0
+
+  ssm_parameters = distinct(flatten([
+    for def in var.container_definitions :
+      values(def.secrets)
+  ]))
+
+  has_secrets            = length(local.ssm_parameters) > 0
   ssm_parameter_arn_base = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/"
 
   secrets_arns = [
-    for key in keys(var.container_secrets) :
-    "${local.ssm_parameter_arn_base}${replace(lookup(var.container_secrets, key), "/^//", "")}"
+    for param in local.ssm_parameters :
+    "${local.ssm_parameter_arn_base}${replace(param, "/^//", "")}"
   ]
 
   alb_name = "${var.app_name}-alb" // ALB name has a restriction of 32 characters max
   app_domain_url = "${var.app_name}.${var.hosted_zone.name}" // Route53 A record name
+  cloudwatch_log_group_name = "fargate/${var.app_name}" // CloudWatch Log Group name
+
+  container_definitions = [
+    for def in var.container_definitions: {
+      name       = def.name
+      image      = def.image
+      essential  = true
+      privileged = false
+      portMappings = [
+      for port in def.ports :
+      {
+        containerPort = port
+        hostPort      = port
+        protocol      = "tcp"
+      }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = local.cloudwatch_log_group_name
+          awslogs-region        = data.aws_region.current.name
+          awslogs-stream-prefix = def.name
+        }
+      }
+      environment = [
+      for key in keys(def.environment_variables) :
+      {
+        name = key
+        value = lookup(def.environment_variables, key)
+      }
+      ]
+      secrets     = [
+      for key in keys(def.secrets) :
+      {
+        name = key
+        valueFrom = "${local.ssm_parameter_arn_base}${replace(lookup(def.secrets, key), "/^//", "")}"
+      }
+      ]
+      mountPoints = []
+      volumesFrom = []
+    }
+  ]
 }
 
 # ==================== ALB ====================
@@ -224,7 +272,7 @@ resource "aws_iam_role_policy_attachment" "secret_task_policy_attach" {
 }
 # --- task definition ---
 resource "aws_ecs_task_definition" "task_def" {
-  container_definitions = var.container_definitions
+  container_definitions = jsonencode(local.container_definitions)
   family = "${var.app_name}-def"
   cpu = var.task_cpu
   memory = var.task_memory
@@ -264,7 +312,7 @@ resource "aws_ecs_service" "service" {
   name = var.app_name
   task_definition = aws_ecs_task_definition.task_def.arn
   cluster = aws_ecs_cluster.cluster.id
-  desired_count = var.min_capacity
+  desired_count = 1
   launch_type = "FARGATE"
   deployment_controller {
     type = "CODE_DEPLOY"
@@ -277,7 +325,7 @@ resource "aws_ecs_service" "service" {
 
   load_balancer {
     target_group_arn = aws_alb_target_group.blue.arn
-    container_name = var.container_name
+    container_name = local.container_definitions[0].name
     container_port = var.image_port
   }
 //  load_balancer {
@@ -375,6 +423,14 @@ resource "aws_codedeploy_deployment_group" "deploymentgroup" {
   }
 
   lifecycle { ignore_changes = [blue_green_deployment_config] }
+}
+
+# ==================== CloudWatch ====================
+resource "aws_cloudwatch_log_group" "container_log_group" {
+  name              = local.cloudwatch_log_group_name
+  retention_in_days = var.log_retention_in_days
+
+  tags = var.tags
 }
 
 //module "autoscaling" {
