@@ -4,11 +4,11 @@ variable "app_name" {
 }
 variable "container_definitions" {
   type = list(object({
-    name = string
-    image = string
-    ports = list(number)
+    name                  = string
+    image                 = string
+    ports                 = list(number)
     environment_variables = map(string)
-    secrets = map(string)
+    secrets               = map(string)
   }))
   description = "A list of container definitions. The first container definition should be your main container."
 }
@@ -46,38 +46,36 @@ variable "security_groups" {
   description = "List of extra security group IDs to attach to the fargate task."
   default     = []
 }
-
 variable "vpc_id" {
-  type = string
+  type        = string
   description = "VPC ID to deploy ECS fargate service."
 }
-
 variable "public_subnet_ids" {
-  type = list(string)
+  type        = list(string)
   description = "List of subnet IDs for the ALB."
 }
 variable "private_subnet_ids" {
-  type = list(string)
+  type        = list(string)
   description = "List of subnet IDs for the fargate service."
 }
 variable "role_permissions_boundary_arn" {
-  type = string
+  type        = string
   description = "ARN of the IAM Role permissions boundary to place on each IAM role created."
 }
 variable "target_group_deregistration_delay" {
-  type = number
+  type        = number
   description = "Deregistration delay in seconds for ALB target groups. Defaults to 60 seconds."
-  default = 60
+  default     = 60
 }
 variable "hosted_zone" {
   type = object({
     name = string,
-    id = string
+    id   = string
   })
   description = "Hosted Zone object to redirect to ALB. (Can pass in the aws_hosted_zone object). A and AAAA records created in this hosted zone."
 }
 variable "https_certificate_arn" {
-  type = string
+  type        = string
   description = "ARN of the HTTPS certificate of the hosted zone/domain."
 }
 variable "min_capacity" {

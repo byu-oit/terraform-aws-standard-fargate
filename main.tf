@@ -12,7 +12,7 @@ locals {
 
   ssm_parameters = distinct(flatten([
     for def in var.container_definitions :
-      values(def.secrets)
+    values(def.secrets)
   ]))
   has_secrets            = length(local.ssm_parameters) > 0
   ssm_parameter_arn_base = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/"
@@ -21,23 +21,23 @@ locals {
     "${local.ssm_parameter_arn_base}${replace(param, "/^//", "")}"
   ]
 
-  alb_name = "${var.app_name}-alb" // ALB name has a restriction of 32 characters max
-  app_domain_url = "${var.app_name}.${var.hosted_zone.name}" // Route53 A record name
-  cloudwatch_log_group_name = "fargate/${var.app_name}" // CloudWatch Log Group name
+  alb_name                  = "${var.app_name}-alb"                     // ALB name has a restriction of 32 characters max
+  app_domain_url            = "${var.app_name}.${var.hosted_zone.name}" // Route53 A record name
+  cloudwatch_log_group_name = "fargate/${var.app_name}"                 // CloudWatch Log Group name
 
   container_definitions = [
-    for def in var.container_definitions: {
+    for def in var.container_definitions : {
       name       = def.name
       image      = def.image
       essential  = true
       privileged = false
       portMappings = [
-      for port in def.ports :
-      {
-        containerPort = port
-        hostPort      = port
-        protocol      = "tcp"
-      }
+        for port in def.ports :
+        {
+          containerPort = port
+          hostPort      = port
+          protocol      = "tcp"
+        }
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -48,18 +48,18 @@ locals {
         }
       }
       environment = [
-      for key in keys(def.environment_variables) :
-      {
-        name = key
-        value = lookup(def.environment_variables, key)
-      }
+        for key in keys(def.environment_variables) :
+        {
+          name  = key
+          value = lookup(def.environment_variables, key)
+        }
       ]
-      secrets     = [
-      for key in keys(def.secrets) :
-      {
-        name = key
-        valueFrom = "${local.ssm_parameter_arn_base}${replace(lookup(def.secrets, key), "/^//", "")}"
-      }
+      secrets = [
+        for key in keys(def.secrets) :
+        {
+          name      = key
+          valueFrom = "${local.ssm_parameter_arn_base}${replace(lookup(def.secrets, key), "/^//", "")}"
+        }
       ]
       mountPoints = []
       volumesFrom = []
@@ -69,10 +69,10 @@ locals {
 
 # ==================== ALB ====================
 resource "aws_alb" "alb" {
-  name = local.alb_name
-  subnets = var.public_subnet_ids
+  name            = local.alb_name
+  subnets         = var.public_subnet_ids
   security_groups = [aws_security_group.alb-sg.id]
-  tags = var.tags
+  tags            = var.tags
 }
 resource "aws_security_group" "alb-sg" {
   name        = "${local.alb_name}-sg"
@@ -81,22 +81,22 @@ resource "aws_security_group" "alb-sg" {
 
   // allow access to the ALB from anywhere for 80 and 443
   ingress {
-    from_port = 80
-    to_port = 80
-    protocol = "tcp"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
   ingress {
-    from_port = 443
-    to_port = 443
-    protocol = "tcp"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
   // allow any outgoing traffic
   egress {
-    protocol  = "-1"
-    from_port = 0
-    to_port   = 0
+    protocol    = "-1"
+    from_port   = 0
+    to_port     = 0
     cidr_blocks = ["0.0.0.0/0"]
   }
   tags = var.tags
@@ -143,11 +143,11 @@ resource "aws_alb_target_group" "green" {
 }
 resource "aws_alb_listener" "https" {
   load_balancer_arn = aws_alb.alb.arn
-  port = 443
-  protocol = "HTTPS"
-  certificate_arn = var.https_certificate_arn
+  port              = 443
+  protocol          = "HTTPS"
+  certificate_arn   = var.https_certificate_arn
   default_action {
-    type = "forward"
+    type             = "forward"
     target_group_arn = aws_alb_target_group.blue.arn
   }
   lifecycle {
@@ -156,14 +156,14 @@ resource "aws_alb_listener" "https" {
 }
 resource "aws_alb_listener" "http_to_https" {
   load_balancer_arn = aws_alb.alb.arn
-  port = 80
-  protocol = "HTTP"
+  port              = 80
+  protocol          = "HTTP"
   default_action {
     type = "redirect"
     redirect {
       status_code = "HTTP_301"
-      port = aws_alb_listener.https.port
-      protocol = aws_alb_listener.https.protocol
+      port        = aws_alb_listener.https.port
+      protocol    = aws_alb_listener.https.protocol
     }
   }
 }
@@ -202,15 +202,15 @@ data "aws_iam_policy_document" "task_execution_policy" {
     ]
     principals {
       identifiers = ["ecs-tasks.amazonaws.com"]
-      type = "Service"
+      type        = "Service"
     }
   }
 }
 resource "aws_iam_role" "task_execution_role" {
-  name = "${var.app_name}-taskExecutionRole"
-  assume_role_policy = data.aws_iam_policy_document.task_execution_policy.json
+  name                 = "${var.app_name}-taskExecutionRole"
+  assume_role_policy   = data.aws_iam_policy_document.task_execution_policy.json
   permissions_boundary = var.role_permissions_boundary_arn
-  tags = var.tags
+  tags                 = var.tags
 }
 resource "aws_iam_role_policy_attachment" "task_execution_policy_attach" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
@@ -218,7 +218,7 @@ resource "aws_iam_role_policy_attachment" "task_execution_policy_attach" {
 }
 // Make sure the fargate task has access to get the parameters from the container secrets
 data "aws_iam_policy_document" "secrets_access" {
-  count = local.has_secrets ? 1 : 0
+  count   = local.has_secrets ? 1 : 0
   version = "2012-10-17"
   statement {
     effect = "Allow"
@@ -231,12 +231,12 @@ data "aws_iam_policy_document" "secrets_access" {
   }
 }
 resource "aws_iam_policy" "secrets_access" {
-  count = local.has_secrets ? 1 : 0
+  count  = local.has_secrets ? 1 : 0
   name   = "${var.app_name}_secrets_access"
   policy = data.aws_iam_policy_document.secrets_access[0].json
 }
 resource "aws_iam_role_policy_attachment" "secrest_policy_attach" {
-  count = local.has_secrets ? 1 : 0
+  count      = local.has_secrets ? 1 : 0
   policy_arn = aws_iam_policy.secrets_access[0].arn
   role       = aws_iam_role.task_execution_role.name
 }
@@ -247,37 +247,37 @@ data "aws_iam_policy_document" "task_policy" {
     effect = "Allow"
     principals {
       identifiers = ["ecs-tasks.amazonaws.com"]
-      type = "Service"
+      type        = "Service"
     }
     actions = ["sts:AssumeRole"]
   }
 }
 resource "aws_iam_role" "task_role" {
-  name = "${var.app_name}-taskRole"
-  assume_role_policy = data.aws_iam_policy_document.task_policy.json
+  name                 = "${var.app_name}-taskRole"
+  assume_role_policy   = data.aws_iam_policy_document.task_policy.json
   permissions_boundary = var.role_permissions_boundary_arn
-  tags = var.tags
+  tags                 = var.tags
 }
 resource "aws_iam_role_policy_attachment" "task_policy_attach" {
-  count = length(var.task_policies)
+  count      = length(var.task_policies)
   policy_arn = element(var.task_policies, count.index)
   role       = aws_iam_role.task_role.name
 }
 resource "aws_iam_role_policy_attachment" "secret_task_policy_attach" {
-  count = local.has_secrets ? 1 : 0
+  count      = local.has_secrets ? 1 : 0
   policy_arn = aws_iam_policy.secrets_access[0].arn
   role       = aws_iam_role.task_role.name
 }
 # --- task definition ---
 resource "aws_ecs_task_definition" "task_def" {
-  container_definitions = jsonencode(local.container_definitions)
-  family = "${var.app_name}-def"
-  cpu = var.task_cpu
-  memory = var.task_memory
-  network_mode = "awsvpc"
+  container_definitions    = jsonencode(local.container_definitions)
+  family                   = "${var.app_name}-def"
+  cpu                      = var.task_cpu
+  memory                   = var.task_memory
+  network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  execution_role_arn = aws_iam_role.task_execution_role.arn
-  task_role_arn = aws_iam_role.task_role.arn
+  execution_role_arn       = aws_iam_role.task_execution_role.arn
+  task_role_arn            = aws_iam_role.task_role.arn
 
   tags = var.tags
 }
@@ -288,49 +288,49 @@ resource "aws_ecs_cluster" "cluster" {
   tags = var.tags
 }
 resource "aws_security_group" "fargate_service_sg" {
-  name = "${var.app_name}-fargate-sg"
+  name        = "${var.app_name}-fargate-sg"
   description = "Controls access to the Fargate Service"
-  vpc_id = var.vpc_id
+  vpc_id      = var.vpc_id
 
   ingress {
-    from_port = 0
-    to_port = 65535
-    protocol = "tcp"
+    from_port       = 0
+    to_port         = 65535
+    protocol        = "tcp"
     security_groups = [aws_security_group.alb-sg.id]
   }
   egress {
-    from_port = 0
-    to_port = 0
-    protocol = "-1"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
   tags = var.tags
 }
 resource "aws_ecs_service" "service" {
-  name = var.app_name
+  name            = var.app_name
   task_definition = aws_ecs_task_definition.task_def.arn
-  cluster = aws_ecs_cluster.cluster.id
-  desired_count = 1
-  launch_type = "FARGATE"
+  cluster         = aws_ecs_cluster.cluster.id
+  desired_count   = 1
+  launch_type     = "FARGATE"
   deployment_controller {
     type = "CODE_DEPLOY"
   }
   network_configuration {
-    subnets = var.private_subnet_ids
-    security_groups = [aws_security_group.fargate_service_sg.id]
+    subnets          = var.private_subnet_ids
+    security_groups  = [aws_security_group.fargate_service_sg.id]
     assign_public_ip = true
   }
 
   load_balancer {
     target_group_arn = aws_alb_target_group.blue.arn
-    container_name = local.container_definitions[0].name
-    container_port = var.image_port
+    container_name   = local.container_definitions[0].name
+    container_port   = var.image_port
   }
-//  load_balancer {
-//    target_group_arn = aws_alb_target_group.green.arn
-//    container_name = var.container_name
-//    container_port = var.image_port
-//  }
+  //  load_balancer {
+  //    target_group_arn = aws_alb_target_group.green.arn
+  //    container_name = var.container_name
+  //    container_port = var.image_port
+  //  }
 
   health_check_grace_period_seconds = var.health_check_grace_period
 
@@ -356,7 +356,7 @@ data "aws_iam_policy_document" "codedeploy_policy" {
     effect = "Allow"
     principals {
       identifiers = ["codedeploy.amazonaws.com"]
-      type = "Service"
+      type        = "Service"
     }
     actions = ["sts:AssumeRole"]
   }
@@ -373,7 +373,7 @@ resource "aws_iam_role_policy_attachment" "AWSCodeDeployRole" {
 }
 
 resource "aws_codedeploy_deployment_group" "deploymentgroup" {
- app_name               = aws_codedeploy_app.app.name
+  app_name               = aws_codedeploy_app.app.name
   deployment_group_name  = "${var.app_name}-deployment-group"
   service_role_arn       = aws_iam_role.codedeploy_role.arn
   deployment_config_name = "CodeDeployDefault.ECSAllAtOnce"
@@ -407,10 +407,10 @@ resource "aws_codedeploy_deployment_group" "deploymentgroup" {
       prod_traffic_route {
         listener_arns = [aws_alb_listener.https.arn]
       }
-//      TODO test listener traffic
-//      test_traffic_route {
-//        listener_arns = aws_alb_listener.....
-//      }
+      //      TODO test listener traffic
+      //      test_traffic_route {
+      //        listener_arns = aws_alb_listener.....
+      //      }
       target_group {
         name = aws_alb_target_group.blue.name
       }
@@ -427,82 +427,82 @@ resource "aws_codedeploy_deployment_group" "deploymentgroup" {
 resource "aws_cloudwatch_log_group" "container_log_group" {
   name              = local.cloudwatch_log_group_name
   retention_in_days = var.log_retention_in_days
-  tags = var.tags
+  tags              = var.tags
 }
 
 # ==================== AutoScaling ====================
 resource "aws_appautoscaling_target" "main" {
-  min_capacity = var.min_capacity
-  max_capacity = var.max_capacity
-  resource_id = "service/${aws_ecs_cluster.cluster.name}/${aws_ecs_service.service.name}"
+  min_capacity       = var.min_capacity
+  max_capacity       = var.max_capacity
+  resource_id        = "service/${aws_ecs_cluster.cluster.name}/${aws_ecs_service.service.name}"
   scalable_dimension = "ecs:service:DesiredCount"
-  service_namespace = "ecs"
+  service_namespace  = "ecs"
 }
 resource "aws_appautoscaling_policy" "up" {
-  name = "${var.app_name}-autoscale-up"
-  resource_id = aws_appautoscaling_target.main.resource_id
+  name               = "${var.app_name}-autoscale-up"
+  resource_id        = aws_appautoscaling_target.main.resource_id
   scalable_dimension = aws_appautoscaling_target.main.scalable_dimension
-  service_namespace = aws_appautoscaling_target.main.service_namespace
+  service_namespace  = aws_appautoscaling_target.main.service_namespace
 
   step_scaling_policy_configuration {
-    adjustment_type = "ChangeInCapacity"
+    adjustment_type         = "ChangeInCapacity"
     metric_aggregation_type = "Average"
-    cooldown = 300
+    cooldown                = 300
 
     step_adjustment {
-      scaling_adjustment = 1
+      scaling_adjustment          = 1
       metric_interval_lower_bound = 0
     }
   }
 }
 resource "aws_cloudwatch_metric_alarm" "up" {
   alarm_name = "${var.app_name}-alarm-up"
-  namespace = "AWS/ECS"
+  namespace  = "AWS/ECS"
   dimensions = {
     ClusterName = aws_ecs_cluster.cluster.name
     ServiceName = aws_ecs_service.service.name
   }
-  statistic = "Average"
-  metric_name = "CPUUtilization"
+  statistic           = "Average"
+  metric_name         = "CPUUtilization"
   comparison_operator = "GreaterThanThreshold"
-  threshold = 75
-  period = 300
-  evaluation_periods = 5
-  alarm_actions = [aws_appautoscaling_policy.up.arn]
-  tags = var.tags
+  threshold           = 75
+  period              = 300
+  evaluation_periods  = 5
+  alarm_actions       = [aws_appautoscaling_policy.up.arn]
+  tags                = var.tags
 }
 resource "aws_appautoscaling_policy" "down" {
-  name = "${var.app_name}-autoscale-down"
-  resource_id = aws_appautoscaling_target.main.resource_id
+  name               = "${var.app_name}-autoscale-down"
+  resource_id        = aws_appautoscaling_target.main.resource_id
   scalable_dimension = aws_appautoscaling_target.main.scalable_dimension
-  service_namespace = aws_appautoscaling_target.main.service_namespace
+  service_namespace  = aws_appautoscaling_target.main.service_namespace
 
   step_scaling_policy_configuration {
-    adjustment_type = "ChangeInCapacity"
+    adjustment_type         = "ChangeInCapacity"
     metric_aggregation_type = "Average"
-    cooldown = 300
+    cooldown                = 300
 
     step_adjustment {
-      scaling_adjustment = -1
+      scaling_adjustment          = -1
       metric_interval_upper_bound = 0
     }
   }
 }
 resource "aws_cloudwatch_metric_alarm" "down" {
   alarm_name = "${var.app_name}-alarm-down"
-  namespace = "AWS/ECS"
+  namespace  = "AWS/ECS"
   dimensions = {
     ClusterName = aws_ecs_cluster.cluster.name
     ServiceName = aws_ecs_service.service.name
   }
-  statistic = "Average"
-  metric_name = "CPUUtilization"
+  statistic           = "Average"
+  metric_name         = "CPUUtilization"
   comparison_operator = "LessThanThreshold"
-  threshold = 25
-  period = 300
-  evaluation_periods = 5
-  alarm_actions = [aws_appautoscaling_policy.down.arn]
-  tags = var.tags
+  threshold           = 25
+  period              = 300
+  evaluation_periods  = 5
+  alarm_actions       = [aws_appautoscaling_policy.down.arn]
+  tags                = var.tags
 }
 
 //module "autoscaling" {

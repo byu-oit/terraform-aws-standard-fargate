@@ -4,18 +4,18 @@ provider "aws" {
 }
 
 module "acs" {
-  source = "github.com/byu-oit/terraform-aws-acs-info?ref=v1.2.2"
-  env = "dev"
+  source    = "github.com/byu-oit/terraform-aws-acs-info?ref=v1.2.2"
+  env       = "dev"
   dept_abbr = "ces"
 }
 
 module "fargate_api" {
-//  source         = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.0"
-  source         = "../../" // for local testing
-  app_name       = "example-api"
-  image_port     = 8000
+    source         = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.0"
+//  source     = "../../" // for local testing
+  app_name   = "example-api"
+  image_port = 8000
   container_definitions = [{
-    name = "example"
+    name  = "example"
     image = "crccheck/hello-world"
     ports = [8000]
     environment_variables = {
@@ -26,11 +26,11 @@ module "fargate_api" {
     }
   }]
 
-  hosted_zone = module.acs.route53_zone
-  https_certificate_arn = module.acs.certificate.arn
-  public_subnet_ids = module.acs.public_subnet_ids
-  private_subnet_ids = module.acs.private_subnet_ids
-  vpc_id = module.acs.vpc.id
+  hosted_zone                   = module.acs.route53_zone
+  https_certificate_arn         = module.acs.certificate.arn
+  public_subnet_ids             = module.acs.public_subnet_ids
+  private_subnet_ids            = module.acs.private_subnet_ids
+  vpc_id                        = module.acs.vpc.id
   role_permissions_boundary_arn = module.acs.role_permissions_boundary.arn
 
   tags = {

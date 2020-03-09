@@ -12,19 +12,32 @@ customized solution you may need to use this code more as a pattern or guideline
 ```hcl
 module "my-app" {
   source = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.0"
-  app_name       = "example-api"
-  env            = "dev"
-  dockerfile_dir = "docker/"
-  image_port     = 8000
-  tags           = {
-    repo = "https://github.com/byu-oit/my-cool-example-api"
-  }
+  app_name   = "example-api"
+    image_port = 8000
+    container_definitions = [{
+      name  = "example"
+      image = "crccheck/hello-world"
+      ports = [8000]
+      environment_variables = {}
+      secrets = {}
+    }]
+  
+    hosted_zone                   = module.acs.route53_zone
+    https_certificate_arn         = module.acs.certificate.arn
+    public_subnet_ids             = module.acs.public_subnet_ids
+    private_subnet_ids            = module.acs.private_subnet_ids
+    vpc_id                        = module.acs.vpc.id
+    role_permissions_boundary_arn = module.acs.role_permissions_boundary.arn
+  
+    tags = {
+      env              = "dev"
+      data-sensitivity = "internal"
+      repo             = "https://github.com/byu-oit/terraform-aws-standard-fargate"
+    }
 }
 ```
 
 ## Created Resources
-* ECR Repository
-    * with an uploaded docker image
 * ECS Cluster
 * ECS Service
     * with security group
@@ -44,56 +57,54 @@ module "my-app" {
 
 ## Requirements
 * Terraform version 0.12.16 or greater
-* `bash`
-* `aws` CLI
-* `docker` (with the daemon running)
-* `md5` or `md5sum`
 
 ## Inputs
 | Name | Type | Description | Default |
 | --- | --- | --- | --- |
-| app_name | string | Application name to name your Fargate API and other resources | |
-| dept_abbr| string | AWS Account department abbreviation (e.g. oit, trn) | oit |
-| env | string | Environment of the AWS Account (e.g. dev, prd) | |
-| container_image_url | string | URL to Docker container image including image tag | |
-| image_port | number | The port the docker image is listening on | |
+| app_name | string | Application name to name your Fargate API and other resources (Must be <= 24 alphanumeric characters) | |
+| container_definitions | [list(object)](#container_definitions) | List of container definitions defining the docker container to run | |
+| image_port | number | The port the main docker image is listening on | |
 | health_check_path | string | Health check path for the image | "/" |
 | health_check_grace_period | number | Health check grace period in seconds| 0 |
-| container_env_variables | map(string) | Map of environment variables to pass to the container definition | {} |
-| container_secrets | map(string) | Map of secrets from the parameter store to be assigned to env variables. Use `task_policies` to make sure the Task's IAM role has access to the SSM parameters | {} |
 | task_policies | list(string) | List of IAM Policy ARNs to attach to the task execution IAM Policy| [] |
 | task_cpu | number | CPU for the task definition | 256 |
 | task_memory | number | Memory for the task definition | 512 |
 | security_groups | list(string) | List of extra security group IDs to attach to the fargate task | []|
-| vpn_to_campus | bool | Do the Fargate tasks need to run in the VPC that has a VPN back to campus? | false |
+| vpc_id | string | VPC ID to deploy the ECS fargate service and ALB | |
+| public_subnet_ids | list(string) | List of subnet IDs for the ALB | |
+| private_subnet_ids | list(string) | List of subnet IDs for the fargate service | |
+| role_permissions_boundary_arn | string | ARN of the IAM Role permissions boundary to place on each IAM role created | |
+| target_group_deregistration_delay | number | Deregistration delay in seconds for ALB target groups | 60 |
+| hosted_zone | [object](#hosted_zone) | Hosted Zone object to redirect to ALB. (Can pass in the aws_hosted_zone object). A and AAAA records created in this hosted zone | |
+| https_certificate_arn | string | ARN of the HTTPS certificate of the hosted zone/domain | |
 | min_capacity | number | Minimum task count for autoscaling | 1 |
 | max_capacity | number | Maximum task count for autoscaling | 2 | 
 | log_retention_in_days | number | CloudWatch log group retention in days | 7 |
 | tags | map(string) | A map of AWS Tags to attach to each resource created | {} |
 
-#### container_image_url
-This can be the ecr_image_url with the tag like:
-```
-<acct_num>.dkr.ecr.us-west-2.amazonaws.com/myapp:dev
-```
-or it can be just the image URL from dockerHub or some other docker registry.
-
-This module will attempt to create the ECS Fargate Service looking at this image url. If there are no images uploaded to
-the URL then ECS will continue to try starting the task until an image exists. 
+#### container_definitions
+List of objects with following attributes to define the docker container(s) your fargate needs to run.
+* **`name`** - (Required) container name (referenced in CloudWatch logs, and possibly by other containers)
+* **`image`** - (Required) the ecr_image_url with the tag like: `<acct_num>.dkr.ecr.us-west-2.amazonaws.com/myapp:dev` or the image URL from dockerHub or some other docker registry
+* **`ports`** - (Required) a list of ports this container is listening on
+* **`environment_variables`** - (Required) a map of environment variables to pass to the docker container
+* **`secrets`** - (Required) a map of secrets from the parameter store to be assigned to env variables
 
 **Before running this configuration** make sure that your ECR repo exists and an image has been pushed to the repo.
 
-#### tags
-Follow the [tagging standard](https://github.com/byu-oit/BYU-AWS-Documentation#tagging-standard). Some tags will be defaulted but can be overridden.
-* `env` defaults to the input variable `env`
-* `data-sensitivity` defaults to "confidential"
+#### hosted_zone
+You can pass in either the object from the AWS terraform provider for an AWS Hosted Zone, or just an object with the following attributes:
+* **`name`** - (Required) Name of the hosted zone
+* **`id`** - (Required) ID of the hosted zone
 
 ## Outputs
 | Name | Type | Description |
 | --- | --- | --- |
 | fargate_service | [object](https://www.terraform.io/docs/providers/aws/r/ecs_service.html#attributes-reference) | Fargate ECS Service object |
 | fargate_service_security_group | [object](https://www.terraform.io/docs/providers/aws/r/security_group.html#attributes-reference) | Security Group object assigned to the Fargate service |
-| codedeploy_appspec_json | string | JSON string of a simple appspec.json file to be used in the CodeDeploy deployment |
+| task_definition | [object](https://www.terraform.io/docs/providers/aws/r/ecs_task_definition.html#attributes-reference) | The task definition object of the fargate service |
+| codedeploy_deployment_group | [object](https://www.terraform.io/docs/providers/aws/r/codedeploy_deployment_group.html#attributes-reference) | The CodeDeploy deployment group object. |
+| codedeploy_basic_appspec_json | string | JSON string of a simple appspec.json file to be used in the CodeDeploy deployment |
 | alb | [object](https://www.terraform.io/docs/providers/aws/r/lb.html#attributes-reference) | The Application Load Balancer (ALB) object |
 | alb_security_group | [object](https://www.terraform.io/docs/providers/aws/r/security_group.html#attributes-reference) | The ALB's security group object |
 | dns_record | [object](https://www.terraform.io/docs/providers/aws/r/route53_record.html#attributes-reference) | The DNS A-record mapped to the ALB | 
