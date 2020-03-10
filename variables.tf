@@ -21,6 +21,26 @@ variable "health_check_path" {
   description = "Health check path for the image. Defaults to \"/\"."
   default     = "/"
 }
+variable "health_check_interval" {
+  type        = number
+  description = "Health check interval; amount of time, in seconds, between health checks of an individual target. Defaults to 30."
+  default     = 30
+}
+variable "health_check_timeout" {
+  type        = number
+  description = "Health check timeout; amount of time, in seconds, during which no response means a failed health check. Defaults to 5."
+  default     = 5
+}
+variable "health_check_healthy_threshold" {
+  type        = number
+  description = "Health check healthy threshold; number of consecutive health checks required before considering target as healthy. Defaults to 3."
+  default     = 3
+}
+variable "health_check_unhealthy_threshold" {
+  type        = number
+  description = "Health check unhealthy threshold; number of consecutive failed health checks required before considering target as unhealthy. Defaults to 3."
+  default     = 3
+}
 variable "health_check_grace_period" {
   type        = number
   description = "Health check grace period in seconds. Defaults to 0."
@@ -61,6 +81,11 @@ variable "private_subnet_ids" {
 variable "codedeploy_service_role_arn" {
   type        = string
   description = "ARN of the IAM Role for the CodeDeploy to use to initiate new deployments. (usually the PowerBuilder Role)"
+}
+variable "codedeploy_termination_wait_time" {
+  type        = number
+  description = "The number of minutes to wait after a successful blue/green deployment before terminating instances from the original environment. Defaults to 15"
+  default     = 15
 }
 variable "role_permissions_boundary_arn" {
   type        = string

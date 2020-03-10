@@ -10,8 +10,8 @@ module "acs" {
 }
 
 module "fargate_api" {
-    source         = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.0"
-//  source     = "../../" // for local testing
+//    source         = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.0"
+  source     = "../../" // for local testing
   app_name   = "example-api"
   image_port = 8000
   container_definitions = [{

@@ -9,7 +9,6 @@ data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
 locals {
-
   ssm_parameters = distinct(flatten([
     for def in var.container_definitions :
     values(def.secrets)
@@ -24,7 +23,7 @@ locals {
   alb_name                  = "${var.app_name}-alb"                     // ALB name has a restriction of 32 characters max
   app_domain_url            = "${var.app_name}.${var.hosted_zone.name}" // Route53 A record name
   cloudwatch_log_group_name = "fargate/${var.app_name}"                 // CloudWatch Log Group name
-  service_name              = var.app_name
+  service_name              = var.app_name                              // ECS Service name
 
   container_definitions = [
     for def in var.container_definitions : {
@@ -66,6 +65,14 @@ locals {
       volumesFrom = []
     }
   ]
+
+  health_check_config = {
+    path                = var.health_check_path
+    interval            = var.health_check_interval
+    timeout             = var.health_check_timeout
+    healthy_threshold   = var.health_check_healthy_threshold
+    unhealthy_threshold = var.health_check_unhealthy_threshold
+  }
 }
 
 # ==================== ALB ====================
@@ -110,13 +117,7 @@ resource "aws_alb_target_group" "blue" {
 
   target_type          = "ip"
   deregistration_delay = var.target_group_deregistration_delay
-  health_check {
-    path                = var.health_check_path
-    interval            = 30
-    timeout             = 5
-    healthy_threshold   = 3
-    unhealthy_threshold = 3
-  }
+  health_check         = local.health_check_config
 
   tags = var.tags
 
@@ -130,13 +131,7 @@ resource "aws_alb_target_group" "green" {
 
   target_type          = "ip"
   deregistration_delay = var.target_group_deregistration_delay
-  health_check {
-    path                = var.health_check_path
-    interval            = 30
-    timeout             = 5
-    healthy_threshold   = 3
-    unhealthy_threshold = 3
-  }
+  health_check         = local.health_check_config
 
   tags = var.tags
 
@@ -327,11 +322,6 @@ resource "aws_ecs_service" "service" {
     container_name   = local.container_definitions[0].name
     container_port   = var.image_port
   }
-  //  load_balancer {
-  //    target_group_arn = aws_alb_target_group.green.arn
-  //    container_name = var.container_name
-  //    container_port = var.image_port
-  //  }
 
   health_check_grace_period_seconds = var.health_check_grace_period
 
@@ -369,7 +359,7 @@ resource "aws_codedeploy_deployment_group" "deploymentgroup" {
     }
     terminate_blue_instances_on_deployment_success {
       action                           = "TERMINATE"
-      termination_wait_time_in_minutes = 15
+      termination_wait_time_in_minutes = var.codedeploy_termination_wait_time
     }
   }
 

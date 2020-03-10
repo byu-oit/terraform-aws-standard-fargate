@@ -65,6 +65,10 @@ module "my-app" {
 | container_definitions | [list(object)](#container_definitions) | List of container definitions defining the docker container to run | |
 | image_port | number | The port the main docker image is listening on | |
 | health_check_path | string | Health check path for the image | "/" |
+| health_check_interval | number | Amount of time, in seconds, between health checks of an individual target | 30 |
+| health_check_timeout | number | Amount of time, in seconds, during which no response means a failed health check | 5 |
+| health_check_healthy_threshold | number | Number of consecutive health checks required before considering target as healthy | 3 |
+| health_check_unhealthy_threshold | number | Number of consecutive failed health checks required before considering target as unhealthy | 3 |
 | health_check_grace_period | number | Health check grace period in seconds| 0 |
 | task_policies | list(string) | List of IAM Policy ARNs to attach to the task execution IAM Policy| [] |
 | task_cpu | number | CPU for the task definition | 256 |
@@ -74,6 +78,7 @@ module "my-app" {
 | public_subnet_ids | list(string) | List of subnet IDs for the ALB | |
 | private_subnet_ids | list(string) | List of subnet IDs for the fargate service | |
 | codedeploy_service_role_arn | string | ARN of the IAM Role for the CodeDeploy to use to initiate new deployments. (usually the PowerBuilder Role) | |
+| codedeploy_termination_wait_time | number | the number of minutes to wait after a successful blue/green deployment before terminating instances from the original environment | 15 |
 | role_permissions_boundary_arn | string | ARN of the IAM Role permissions boundary to place on each IAM role created | |
 | target_group_deregistration_delay | number | Deregistration delay in seconds for ALB target groups | 60 |
 | hosted_zone | [object](#hosted_zone) | Hosted Zone object to redirect to ALB. (Can pass in the aws_hosted_zone object). A and AAAA records created in this hosted zone | |
