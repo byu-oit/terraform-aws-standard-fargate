@@ -19,7 +19,7 @@ module "fargate_api" {
     image = "crccheck/hello-world"
     ports = [8000]
     environment_variables = {
-      env = "dev"
+      env = "tst"
     }
     secrets = {
       foo = "/super-secret"
@@ -31,6 +31,7 @@ module "fargate_api" {
   public_subnet_ids             = module.acs.public_subnet_ids
   private_subnet_ids            = module.acs.private_subnet_ids
   vpc_id                        = module.acs.vpc.id
+  codedeploy_service_role_arn   = module.acs.power_builder_role.arn
   role_permissions_boundary_arn = module.acs.role_permissions_boundary.arn
 
   tags = {
@@ -44,6 +45,6 @@ output "url" {
   value = module.fargate_api.dns_record.fqdn
 }
 
-output "base_appspec" {
+output "base_appspec_string" {
   value = module.fargate_api.codedeploy_basic_appspec_json
 }

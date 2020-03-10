@@ -24,6 +24,7 @@ locals {
   alb_name                  = "${var.app_name}-alb"                     // ALB name has a restriction of 32 characters max
   app_domain_url            = "${var.app_name}.${var.hosted_zone.name}" // Route53 A record name
   cloudwatch_log_group_name = "fargate/${var.app_name}"                 // CloudWatch Log Group name
+  service_name              = var.app_name
 
   container_definitions = [
     for def in var.container_definitions : {
@@ -44,7 +45,7 @@ locals {
         options = {
           awslogs-group         = local.cloudwatch_log_group_name
           awslogs-region        = data.aws_region.current.name
-          awslogs-stream-prefix = def.name
+          awslogs-stream-prefix = local.service_name
         }
       }
       environment = [
@@ -307,7 +308,7 @@ resource "aws_security_group" "fargate_service_sg" {
   tags = var.tags
 }
 resource "aws_ecs_service" "service" {
-  name            = var.app_name
+  name            = local.service_name
   task_definition = aws_ecs_task_definition.task_def.arn
   cluster         = aws_ecs_cluster.cluster.id
   desired_count   = 1
@@ -350,32 +351,11 @@ resource "aws_codedeploy_app" "app" {
   name             = "${var.app_name}-codedeploy"
   compute_platform = "ECS"
 }
-data "aws_iam_policy_document" "codedeploy_policy" {
-  version = "2012-10-17"
-  statement {
-    effect = "Allow"
-    principals {
-      identifiers = ["codedeploy.amazonaws.com"]
-      type        = "Service"
-    }
-    actions = ["sts:AssumeRole"]
-  }
-}
-resource "aws_iam_role" "codedeploy_role" {
-  name                 = "${var.app_name}-codedeploy-role"
-  permissions_boundary = var.role_permissions_boundary_arn
-  assume_role_policy   = data.aws_iam_policy_document.codedeploy_policy.json
-}
-
-resource "aws_iam_role_policy_attachment" "AWSCodeDeployRole" {
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole"
-  role       = aws_iam_role.codedeploy_role.name
-}
 
 resource "aws_codedeploy_deployment_group" "deploymentgroup" {
   app_name               = aws_codedeploy_app.app.name
   deployment_group_name  = "${var.app_name}-deployment-group"
-  service_role_arn       = aws_iam_role.codedeploy_role.arn
+  service_role_arn       = var.codedeploy_service_role_arn
   deployment_config_name = "CodeDeployDefault.ECSAllAtOnce"
 
   ecs_service {
@@ -505,68 +485,22 @@ resource "aws_cloudwatch_metric_alarm" "down" {
   tags                = var.tags
 }
 
-//module "autoscaling" {
-//  source             = "github.com/byu-oit/terraform-aws-app-autoscaling?ref=v1.0.1"
-//  app_name           = var.app_name
-//  min_capacity       = var.min_capacity
-//  max_capacity       = var.max_capacity
-//  resource_id        = "service/${module.fargate.ecs_cluster.name}/${module.fargate.ecs_service.name}"
-//  scalable_dimension = "ecs:service:DesiredCount"
-//  service_namespace  = "ecs"
-//  step_up = {
-//    adjustment_type         = "ChangeInCapacity"
-//    cooldown                = 300
-//    metric_aggregation_type = null // use default
-//    step_adjustments = [
-//      {
-//        lower_bound        = 0
-//        upper_bound        = null
-//        scaling_adjustment = 1
-//      }
-//    ]
-//
-//    alarm = {
-//      namespace = "AWS/ECS"
-//      dimensions = {
-//        ClusterName = module.fargate.ecs_cluster.name
-//        ServiceName = module.fargate.ecs_service.name
-//      }
-//      statistic           = null // use default
-//      metric_name         = "CPUUtilization"
-//      comparison_operator = "GreaterThanThreshold"
-//      threshold           = 75
-//      period              = null // use default
-//      evaluation_periods  = null // use default
-//    }
-//  }
-//
-//  step_down = {
-//    adjustment_type         = "ChangeInCapacity"
-//    cooldown                = 300
-//    metric_aggregation_type = null // use default
-//    step_adjustments = [
-//      {
-//        lower_bound        = null
-//        upper_bound        = 0
-//        scaling_adjustment = -1
-//      }
-//    ]
-//
-//    alarm = {
-//      namespace = "AWS/ECS"
-//      dimensions = {
-//        ClusterName = module.fargate.ecs_cluster.name
-//        ServiceName = module.fargate.ecs_service.name
-//      }
-//      statistic           = null // use default
-//      metric_name         = "CPUUtilization"
-//      comparison_operator = "LessThanThreshold"
-//      threshold           = 25
-//      period              = null // use default
-//      evaluation_periods  = null // use default
-//    }
-//  }
-//
-//  tags = local.tags
-//}
-
+# ==================== AppSpec file ====================
+resource "local_file" "appspec_json" {
+  filename = "${path.cwd}/appspec.json"
+  content = jsonencode({
+    version = 1
+    Resources = [{
+      TargetService = {
+        Type = "AWS::ECS::SERVICE"
+        Properties = {
+          TaskDefinition = aws_ecs_task_definition.task_def.arn
+          LoadBalancerInfo = {
+            ContainerName = local.container_definitions[0].name
+            ContainerPort = var.image_port
+          }
+        }
+      }
+    }]
+  })
+}

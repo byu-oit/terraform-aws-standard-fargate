@@ -15,21 +15,7 @@ output "codedeploy_deployment_group" {
 }
 
 output "codedeploy_basic_appspec_json" {
-  value = jsonencode({
-    version = 1
-    Resources = [{
-      TargetService = {
-        Type = "AWS::ECS::SERVICE"
-        Properties = {
-          TaskDefinition = aws_ecs_task_definition.task_def.arn
-          LoadBalancerInfo = {
-            ContainerName = local.container_definitions[0].name
-            ContainerPort = var.image_port
-          }
-        }
-      }
-    }]
-  })
+  value = local_file.appspec_json.content
 }
 
 output "alb" {
