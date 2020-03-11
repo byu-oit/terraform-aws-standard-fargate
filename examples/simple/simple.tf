@@ -6,7 +6,6 @@ provider "aws" {
 module "acs" {
   source    = "github.com/byu-oit/terraform-aws-acs-info?ref=v1.2.2"
   env       = "dev"
-  dept_abbr = "ces"
 }
 
 module "fargate_api" {

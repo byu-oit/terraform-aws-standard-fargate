@@ -1,7 +1,7 @@
 terraform {
   required_version = ">= 0.12.21"
   required_providers {
-    aws = ">= 2.51"
+    aws = ">= 2.52"
   }
 }
 
@@ -65,14 +65,6 @@ locals {
       volumesFrom = []
     }
   ]
-
-  health_check_config = {
-    path                = var.health_check_path
-    interval            = var.health_check_interval
-    timeout             = var.health_check_timeout
-    healthy_threshold   = var.health_check_healthy_threshold
-    unhealthy_threshold = var.health_check_unhealthy_threshold
-  }
 }
 
 # ==================== ALB ====================
@@ -115,10 +107,16 @@ resource "aws_alb_target_group" "blue" {
   protocol = "HTTP"
   vpc_id   = var.vpc_id
 
+  load_balancing_algorithm_type = "least_outstanding_requests"
   target_type          = "ip"
   deregistration_delay = var.target_group_deregistration_delay
-  health_check         = local.health_check_config
-
+  health_check {
+    path                = var.health_check_path
+    interval            = var.health_check_interval
+    timeout             = var.health_check_timeout
+    healthy_threshold   = var.health_check_healthy_threshold
+    unhealthy_threshold = var.health_check_unhealthy_threshold
+  }
   tags = var.tags
 
   depends_on = [aws_alb.alb]
@@ -129,10 +127,16 @@ resource "aws_alb_target_group" "green" {
   protocol = "HTTP"
   vpc_id   = var.vpc_id
 
+  load_balancing_algorithm_type = "least_outstanding_requests"
   target_type          = "ip"
   deregistration_delay = var.target_group_deregistration_delay
-  health_check         = local.health_check_config
-
+  health_check {
+    path                = var.health_check_path
+    interval            = var.health_check_interval
+    timeout             = var.health_check_timeout
+    healthy_threshold   = var.health_check_healthy_threshold
+    unhealthy_threshold = var.health_check_unhealthy_threshold
+  }
   tags = var.tags
 
   depends_on = [aws_alb.alb]
