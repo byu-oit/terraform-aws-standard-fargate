@@ -11,7 +11,7 @@ customized solution you may need to use this code more as a pattern or guideline
 ## Usage
 ```hcl
 module "my-app" {
-  source = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v1.0.2"
+  source = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v1.2.0"
   app_name       = "example-api"
   env            = "dev"
   dockerfile_dir = "docker/"
@@ -53,7 +53,6 @@ module "my-app" {
 | Name | Type | Description | Default |
 | --- | --- | --- | --- |
 | app_name | string | Application name to name your Fargate API and other resources | |
-| dept_abbr| string | AWS Account department abbreviation (e.g. oit, trn) | oit |
 | env | string | Environment of the AWS Account (e.g. dev, prd) | |
 | container_image_url | string | URL to Docker container image including image tag | |
 | image_port | number | The port the docker image is listening on | |

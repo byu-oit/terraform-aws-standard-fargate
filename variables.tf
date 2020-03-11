@@ -2,11 +2,6 @@ variable "app_name" {
   type        = string
   description = "Application name to name your Fargate API and other resources"
 }
-variable "dept_abbr" {
-  type = string
-  default = "oit"
-  description = "Abbreviation of the department type of account (e.g. oit, trn), defaults to oit."
-}
 variable "env" {
   type        = string
   description = "Environment of the AWS Account (e.g. dev, prd)"

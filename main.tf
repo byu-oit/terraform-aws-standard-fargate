@@ -24,9 +24,7 @@ locals {
 }
 
 module "acs" {
-  source            = "github.com/byu-oit/terraform-aws-acs-info?ref=v1.2.2"
-  env               = var.env
-  dept_abbr         = var.dept_abbr
+  source            = "github.com/byu-oit/terraform-aws-acs-info?ref=v2.0.0"
   vpc_vpn_to_campus = var.vpn_to_campus
 }
 
