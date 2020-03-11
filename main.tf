@@ -310,7 +310,7 @@ resource "aws_ecs_service" "service" {
   name            = local.service_name
   task_definition = aws_ecs_task_definition.task_def.arn
   cluster         = aws_ecs_cluster.cluster.id
-  desired_count   = 1
+  desired_count   = var.autoscaling_config != null ? var.autoscaling_config.min_capacity : 1
   launch_type     = "FARGATE"
   deployment_controller {
     type = "CODE_DEPLOY"
@@ -405,18 +405,20 @@ resource "aws_cloudwatch_log_group" "container_log_group" {
 }
 
 # ==================== AutoScaling ====================
-resource "aws_appautoscaling_target" "main" {
-  min_capacity       = var.min_capacity
-  max_capacity       = var.max_capacity
+resource "aws_appautoscaling_target" "default" {
+  count = var.autoscaling_config != null ? 1 : 0
+  min_capacity       = var.autoscaling_config.min_capacity
+  max_capacity       = var.autoscaling_config.max_capacity
   resource_id        = "service/${aws_ecs_cluster.cluster.name}/${aws_ecs_service.service.name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
 }
 resource "aws_appautoscaling_policy" "up" {
+  count = var.autoscaling_config != null ? 1 : 0
   name               = "${var.app_name}-autoscale-up"
-  resource_id        = aws_appautoscaling_target.main.resource_id
-  scalable_dimension = aws_appautoscaling_target.main.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.main.service_namespace
+  resource_id        = aws_appautoscaling_target.default[0].resource_id
+  scalable_dimension = aws_appautoscaling_target.default[0].scalable_dimension
+  service_namespace  = aws_appautoscaling_target.default[0].service_namespace
 
   step_scaling_policy_configuration {
     adjustment_type         = "ChangeInCapacity"
@@ -430,6 +432,7 @@ resource "aws_appautoscaling_policy" "up" {
   }
 }
 resource "aws_cloudwatch_metric_alarm" "up" {
+  count = var.autoscaling_config != null ? 1 : 0
   alarm_name = "${var.app_name}-alarm-up"
   namespace  = "AWS/ECS"
   dimensions = {
@@ -442,14 +445,15 @@ resource "aws_cloudwatch_metric_alarm" "up" {
   threshold           = 75
   period              = 300
   evaluation_periods  = 5
-  alarm_actions       = [aws_appautoscaling_policy.up.arn]
+  alarm_actions       = [aws_appautoscaling_policy.up[0].arn]
   tags                = var.tags
 }
 resource "aws_appautoscaling_policy" "down" {
+  count = var.autoscaling_config != null ? 1 : 0
   name               = "${var.app_name}-autoscale-down"
-  resource_id        = aws_appautoscaling_target.main.resource_id
-  scalable_dimension = aws_appautoscaling_target.main.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.main.service_namespace
+  resource_id        = aws_appautoscaling_target.default[0].resource_id
+  scalable_dimension = aws_appautoscaling_target.default[0].scalable_dimension
+  service_namespace  = aws_appautoscaling_target.default[0].service_namespace
 
   step_scaling_policy_configuration {
     adjustment_type         = "ChangeInCapacity"
@@ -463,6 +467,7 @@ resource "aws_appautoscaling_policy" "down" {
   }
 }
 resource "aws_cloudwatch_metric_alarm" "down" {
+  count = var.autoscaling_config != null ? 1 : 0
   alarm_name = "${var.app_name}-alarm-down"
   namespace  = "AWS/ECS"
   dimensions = {
@@ -475,7 +480,7 @@ resource "aws_cloudwatch_metric_alarm" "down" {
   threshold           = 25
   period              = 300
   evaluation_periods  = 5
-  alarm_actions       = [aws_appautoscaling_policy.down.arn]
+  alarm_actions       = [aws_appautoscaling_policy.down[0].arn]
   tags                = var.tags
 }
 

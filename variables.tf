@@ -107,15 +107,12 @@ variable "https_certificate_arn" {
   type        = string
   description = "ARN of the HTTPS certificate of the hosted zone/domain."
 }
-variable "min_capacity" {
-  type        = number
-  description = "Minimum task count. Defaults to 1."
-  default     = 1
-}
-variable "max_capacity" {
-  type        = number
-  description = "Maximum task count. Defaults to 2."
-  default     = 2
+variable "autoscaling_config" {
+  type = object({
+    min_capacity = number
+    max_capacity = number
+  })
+  description = "Configuration for default autoscaling policies and alarms. Set to null if you want to set up your own autoscaling policies and alarms."
 }
 variable "log_retention_in_days" {
   type        = number

@@ -4,13 +4,12 @@ provider "aws" {
 }
 
 module "acs" {
-  source    = "github.com/byu-oit/terraform-aws-acs-info?ref=v1.2.2"
-  env       = "dev"
+  source    = "github.com/byu-oit/terraform-aws-acs-info?ref=v2.0.0"
 }
 
 module "fargate_api" {
-    source         = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.0"
-//  source     = "../../" // for local testing
+//    source         = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.0"
+  source     = "../../" // for local testing
   app_name   = "example-api"
   image_port = 8000
   container_definitions = [{
@@ -24,6 +23,7 @@ module "fargate_api" {
       foo = "/super-secret"
     }
   }]
+  autoscaling_config = null
 
   hosted_zone                   = module.acs.route53_zone
   https_certificate_arn         = module.acs.certificate.arn
@@ -44,6 +44,6 @@ output "url" {
   value = module.fargate_api.dns_record.fqdn
 }
 
-output "base_appspec_string" {
-  value = module.fargate_api.codedeploy_basic_appspec_json
+output "appspec_filename" {
+  value = module.fargate_api.codedeploy_appspec_json_file
 }

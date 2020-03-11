@@ -83,8 +83,7 @@ module "my-app" {
 | target_group_deregistration_delay | number | Deregistration delay in seconds for ALB target groups | 60 |
 | hosted_zone | [object](#hosted_zone) | Hosted Zone object to redirect to ALB. (Can pass in the aws_hosted_zone object). A and AAAA records created in this hosted zone | |
 | https_certificate_arn | string | ARN of the HTTPS certificate of the hosted zone/domain | |
-| min_capacity | number | Minimum task count for autoscaling | 1 |
-| max_capacity | number | Maximum task count for autoscaling | 2 | 
+| autoscaling_config | [object](#autoscaling_config) | Configuration for default autoscaling policies and alarms. Set to `null` if you want to set up your own autoscaling policies and alarms.  | |
 | log_retention_in_days | number | CloudWatch log group retention in days | 7 |
 | tags | map(string) | A map of AWS Tags to attach to each resource created | {} |
 
@@ -102,6 +101,15 @@ List of objects with following attributes to define the docker container(s) your
 You can pass in either the object from the AWS terraform provider for an AWS Hosted Zone, or just an object with the following attributes:
 * **`name`** - (Required) Name of the hosted zone
 * **`id`** - (Required) ID of the hosted zone
+
+#### autoscaling_config
+This module will create basic default autoscaling policies and alarms and you can define some variables of these default autoscaling policies.
+* **`min_capacity`** - (Required) Minimum task count for autoscaling (this will also be used to define the initial desired count of the ECS Fargate Service)
+* **`max_capacity`** - (Required) Maximum task count for autoscaling
+
+**Note:** If you want to define your own autoscaling policies/alarms then you need to set this field to `null` at which point this module will not create any policies/alarms.
+
+**Note:** the desired count of the ECS Fargate Service will be set the first time terraform runs but changes to desired count will be ignored after the first time.  
 
 #### CloudWatch logs
 This module will create a CloudWatch log group named `fargate/<app_name>` with log streams named `<app_name>/<container_name>/<container_id>`. 
