@@ -4,11 +4,11 @@ provider "aws" {
 }
 
 module "acs" {
-  source    = "github.com/byu-oit/terraform-aws-acs-info?ref=v2.0.0"
+  source = "github.com/byu-oit/terraform-aws-acs-info?ref=v2.0.0"
 }
 
 module "fargate_api" {
-//    source         = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.0"
+  //    source         = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.0"
   source     = "../../" // for local testing
   app_name   = "example-api"
   image_port = 8000
@@ -23,7 +23,14 @@ module "fargate_api" {
       foo = "/super-secret"
     }
   }]
-  autoscaling_config = null
+  autoscaling_config            = null
+  codedeploy_test_listener_port = 8080
+  codedeploy_lifecycle_hooks = [
+    {
+      lifecycle_hook       = "AfterAllowTestTraffic"
+      lambda_function_name = "testLifecycle"
+    }
+  ]
 
   hosted_zone                   = module.acs.route53_zone
   https_certificate_arn         = module.acs.certificate.arn

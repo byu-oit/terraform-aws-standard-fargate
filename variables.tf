@@ -87,6 +87,19 @@ variable "codedeploy_termination_wait_time" {
   description = "The number of minutes to wait after a successful blue/green deployment before terminating instances from the original environment. Defaults to 15"
   default     = 15
 }
+variable "codedeploy_test_listener_port" {
+  type = number
+  description = "The port for a codedeploy test listener. If provided CodeDeploy will use this port for test traffic on the new replacement set during the blue-green deployment process before shifting production traffic to the replacement set. Defaults to null"
+  default = null
+}
+variable "codedeploy_lifecycle_hooks" {
+  type = list(object({
+    lifecycle_hook = string
+    lambda_function_name = string
+  }))
+  description = "Define Lambda Functions for CodeDeploy lifecycle event hooks. Or set this variable to null to not have any lifecycle hooks invoked. Defaults to null"
+  default = null
+}
 variable "role_permissions_boundary_arn" {
   type        = string
   description = "ARN of the IAM Role permissions boundary to place on each IAM role created."

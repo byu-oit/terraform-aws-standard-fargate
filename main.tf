@@ -92,6 +92,16 @@ resource "aws_security_group" "alb-sg" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+  // if test listner port is specified, allow traffic
+  dynamic "ingress" {
+    for_each = var.codedeploy_test_listener_port != null ? [1] : []
+    content {
+      from_port = var.codedeploy_test_listener_port
+      to_port = var.codedeploy_test_listener_port
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+  }
   // allow any outgoing traffic
   egress {
     protocol    = "-1"
@@ -167,7 +177,18 @@ resource "aws_alb_listener" "http_to_https" {
     }
   }
 }
-// TODO add test listener if requested in a variable of some kind?
+resource "aws_alb_listener" "test_listener" {
+  count = var.codedeploy_test_listener_port != null ? 1 : 0
+  load_balancer_arn = aws_alb.alb.arn
+  port = var.codedeploy_test_listener_port
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_alb_target_group.blue.arn
+  }
+  lifecycle {
+    ignore_changes = [default_action[0].target_group_arn]
+  }
+}
 
 # ==================== Route53 ====================
 resource "aws_route53_record" "a_record" {
@@ -381,10 +402,9 @@ resource "aws_codedeploy_deployment_group" "deploymentgroup" {
       prod_traffic_route {
         listener_arns = [aws_alb_listener.https.arn]
       }
-      //      TODO test listener traffic
-      //      test_traffic_route {
-      //        listener_arns = aws_alb_listener.....
-      //      }
+      test_traffic_route {
+        listener_arns = var.codedeploy_test_listener_port != null ? [aws_alb_listener.test_listener[0].arn] : []
+      }
       target_group {
         name = aws_alb_target_group.blue.name
       }
@@ -500,6 +520,10 @@ resource "local_file" "appspec_json" {
           }
         }
       }
-    }]
+    }],
+    Hooks = var.codedeploy_lifecycle_hooks != null ? [
+      for hook in var.codedeploy_lifecycle_hooks:
+        zipmap([hook.lifecycle_hook],[hook.lambda_function_name])
+    ] : null
   })
 }
