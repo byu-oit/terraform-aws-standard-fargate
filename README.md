@@ -14,13 +14,13 @@ module "my-app" {
   source = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.0"
   app_name   = "example-api"
     image_port = 8000
-    container_definitions = [{
+    primary_container_definition = {
       name  = "example"
       image = "crccheck/hello-world"
       ports = [8000]
-      environment_variables = {}
-      secrets = {}
-    }]
+      environment_variables = null
+      secrets = null
+    }
     codedeploy_test_listener_port = 8080
     codedeploy_lifecycle_hooks = [
       {
@@ -69,7 +69,8 @@ module "my-app" {
 | Name | Type | Description | Default |
 | --- | --- | --- | --- |
 | app_name | string | Application name to name your Fargate API and other resources (Must be <= 24 alphanumeric characters) | |
-| container_definitions | [list(object)](#container_definitions) | List of container definitions defining the docker container to run | |
+| primary_container_definition | [object](#container_definition) | The primary container definition for your application. This one will be the only container that receives traffic from the ALB, so make sure the `ports` field contains the same port as the `image_port` | |
+| extra_container_definitions | list([object](#container_definition)) | A list of extra container definitions (side car containers) | [] |
 | image_port | number | The port the main docker image is listening on | |
 | health_check_path | string | Health check path for the image | "/" |
 | health_check_interval | number | Amount of time, in seconds, between health checks of an individual target | 30 |
@@ -96,8 +97,8 @@ module "my-app" {
 | log_retention_in_days | number | CloudWatch log group retention in days | 7 |
 | tags | map(string) | A map of AWS Tags to attach to each resource created | {} |
 
-#### container_definitions
-List of objects with following attributes to define the docker container(s) your fargate needs to run.
+#### container_definition
+Object with following attributes to define the docker container(s) your fargate needs to run.
 * **`name`** - (Required) container name (referenced in CloudWatch logs, and possibly by other containers)
 * **`image`** - (Required) the ecr_image_url with the tag like: `<acct_num>.dkr.ecr.us-west-2.amazonaws.com/myapp:dev` or the image URL from dockerHub or some other docker registry
 * **`ports`** - (Required) a list of ports this container is listening on

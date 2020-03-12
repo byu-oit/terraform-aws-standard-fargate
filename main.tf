@@ -9,9 +9,10 @@ data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
 locals {
+  definitions = concat([var.primary_container_definition], var.extra_container_definitions)
   ssm_parameters = distinct(flatten([
-    for def in var.container_definitions :
-    values(def.secrets)
+    for def in local.definitions :
+    values(def.secrets != null ? def.secrets : {})
   ]))
   has_secrets            = length(local.ssm_parameters) > 0
   ssm_parameter_arn_base = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/"
@@ -26,7 +27,7 @@ locals {
   service_name              = var.app_name                              // ECS Service name
 
   container_definitions = [
-    for def in var.container_definitions : {
+    for def in local.definitions : {
       name       = def.name
       image      = def.image
       essential  = true
@@ -48,14 +49,14 @@ locals {
         }
       }
       environment = [
-        for key in keys(def.environment_variables) :
+        for key in keys(def.environment_variables != null ? def.environment_variables : {}) :
         {
           name  = key
           value = lookup(def.environment_variables, key)
         }
       ]
       secrets = [
-        for key in keys(def.secrets) :
+        for key in keys(def.secrets != null ? def.secrets : {}) :
         {
           name      = key
           valueFrom = "${local.ssm_parameter_arn_base}${replace(lookup(def.secrets, key), "/^//", "")}"
@@ -344,7 +345,7 @@ resource "aws_ecs_service" "service" {
 
   load_balancer {
     target_group_arn = aws_alb_target_group.blue.arn
-    container_name   = local.container_definitions[0].name
+    container_name   = var.primary_container_definition.name
     container_port   = var.image_port
   }
 
@@ -515,7 +516,7 @@ resource "local_file" "appspec_json" {
         Properties = {
           TaskDefinition = aws_ecs_task_definition.task_def.arn
           LoadBalancerInfo = {
-            ContainerName = local.container_definitions[0].name
+            ContainerName = var.primary_container_definition.name
             ContainerPort = var.image_port
           }
         }

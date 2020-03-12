@@ -8,11 +8,11 @@ module "acs" {
 }
 
 module "fargate_api" {
-  //    source         = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.0"
-  source     = "../../" // for local testing
+      source         = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.0"
+//  source     = "../../" // for local testing
   app_name   = "example-api"
   image_port = 8000
-  container_definitions = [{
+  primary_container_definition = {
     name  = "example"
     image = "crccheck/hello-world"
     ports = [8000]
@@ -22,7 +22,16 @@ module "fargate_api" {
     secrets = {
       foo = "/super-secret"
     }
-  }]
+  }
+  extra_container_definitions = [
+    {
+      name  = "sidecar"
+      image = "hello-world"
+      ports = [8001]
+      environment_variables = null
+      secrets = null
+    }
+  ]
   autoscaling_config            = null
   codedeploy_test_listener_port = 8080
   codedeploy_lifecycle_hooks = [

@@ -2,7 +2,17 @@ variable "app_name" {
   type        = string
   description = "Application name to name your Fargate API and other resources. Must be <= 24 characters."
 }
-variable "container_definitions" {
+variable "primary_container_definition" {
+  type = object({
+    name                  = string
+    image                 = string
+    ports                 = list(number)
+    environment_variables = map(string)
+    secrets               = map(string)
+  })
+  description = "The primary container definition for your application. This one will be the only container that receives traffic from the ALB, so make sure the 'ports' field contains the same port as the 'image_port'"
+}
+variable "extra_container_definitions" {
   type = list(object({
     name                  = string
     image                 = string
@@ -10,7 +20,8 @@ variable "container_definitions" {
     environment_variables = map(string)
     secrets               = map(string)
   }))
-  description = "A list of container definitions. The first container definition should be your main container."
+  description = "A list of extra container definitions. Defaults to []"
+  default = []
 }
 variable "image_port" {
   type        = number
