@@ -66,6 +66,27 @@ locals {
       volumesFrom = []
     }
   ]
+
+  hooks = var.codedeploy_lifecycle_hooks != null ? setsubtract([
+    for hook in keys(var.codedeploy_lifecycle_hooks) :
+    zipmap([hook], [lookup(var.codedeploy_lifecycle_hooks, hook, null)])
+    ], [
+    {
+      BeforeInstall = null
+    },
+    {
+      AfterInstall = null
+    },
+    {
+      AfterAllowTestTraffic = null
+    },
+    {
+      BeforeAllowTraffic = null
+    },
+    {
+      AfterAllowTraffic = null
+    }
+  ]) : null
 }
 
 # ==================== ALB ====================
@@ -97,8 +118,8 @@ resource "aws_security_group" "alb-sg" {
   dynamic "ingress" {
     for_each = var.codedeploy_test_listener_port != null ? [1] : []
     content {
-      from_port = var.codedeploy_test_listener_port
-      to_port = var.codedeploy_test_listener_port
+      from_port   = var.codedeploy_test_listener_port
+      to_port     = var.codedeploy_test_listener_port
       protocol    = "tcp"
       cidr_blocks = ["0.0.0.0/0"]
     }
@@ -114,13 +135,13 @@ resource "aws_security_group" "alb-sg" {
 }
 resource "aws_alb_target_group" "blue" {
   name     = "${var.app_name}-tgb"
-  port     = var.image_port
+  port     = var.container_port
   protocol = "HTTP"
   vpc_id   = var.vpc_id
 
   load_balancing_algorithm_type = "least_outstanding_requests"
-  target_type          = "ip"
-  deregistration_delay = var.target_group_deregistration_delay
+  target_type                   = "ip"
+  deregistration_delay          = var.target_group_deregistration_delay
   health_check {
     path                = var.health_check_path
     interval            = var.health_check_interval
@@ -134,13 +155,13 @@ resource "aws_alb_target_group" "blue" {
 }
 resource "aws_alb_target_group" "green" {
   name     = "${var.app_name}-tgg"
-  port     = var.image_port
+  port     = var.container_port
   protocol = "HTTP"
   vpc_id   = var.vpc_id
 
   load_balancing_algorithm_type = "least_outstanding_requests"
-  target_type          = "ip"
-  deregistration_delay = var.target_group_deregistration_delay
+  target_type                   = "ip"
+  deregistration_delay          = var.target_group_deregistration_delay
   health_check {
     path                = var.health_check_path
     interval            = var.health_check_interval
@@ -179,9 +200,11 @@ resource "aws_alb_listener" "http_to_https" {
   }
 }
 resource "aws_alb_listener" "test_listener" {
-  count = var.codedeploy_test_listener_port != null ? 1 : 0
+  count             = var.codedeploy_test_listener_port != null ? 1 : 0
   load_balancer_arn = aws_alb.alb.arn
-  port = var.codedeploy_test_listener_port
+  port              = var.codedeploy_test_listener_port
+  protocol          = "HTTPS"
+  certificate_arn   = var.https_certificate_arn
   default_action {
     type             = "forward"
     target_group_arn = aws_alb_target_group.blue.arn
@@ -257,7 +280,7 @@ resource "aws_iam_policy" "secrets_access" {
   name   = "${var.app_name}_secrets_access"
   policy = data.aws_iam_policy_document.secrets_access[0].json
 }
-resource "aws_iam_role_policy_attachment" "secrest_policy_attach" {
+resource "aws_iam_role_policy_attachment" "secrets_policy_attach" {
   count      = local.has_secrets ? 1 : 0
   policy_arn = aws_iam_policy.secrets_access[0].arn
   role       = aws_iam_role.task_execution_role.name
@@ -346,7 +369,7 @@ resource "aws_ecs_service" "service" {
   load_balancer {
     target_group_arn = aws_alb_target_group.blue.arn
     container_name   = var.primary_container_definition.name
-    container_port   = var.image_port
+    container_port   = var.container_port
   }
 
   health_check_grace_period_seconds = var.health_check_grace_period
@@ -427,7 +450,7 @@ resource "aws_cloudwatch_log_group" "container_log_group" {
 
 # ==================== AutoScaling ====================
 resource "aws_appautoscaling_target" "default" {
-  count = var.autoscaling_config != null ? 1 : 0
+  count              = var.autoscaling_config != null ? 1 : 0
   min_capacity       = var.autoscaling_config.min_capacity
   max_capacity       = var.autoscaling_config.max_capacity
   resource_id        = "service/${aws_ecs_cluster.cluster.name}/${aws_ecs_service.service.name}"
@@ -435,7 +458,7 @@ resource "aws_appautoscaling_target" "default" {
   service_namespace  = "ecs"
 }
 resource "aws_appautoscaling_policy" "up" {
-  count = var.autoscaling_config != null ? 1 : 0
+  count              = var.autoscaling_config != null ? 1 : 0
   name               = "${var.app_name}-autoscale-up"
   resource_id        = aws_appautoscaling_target.default[0].resource_id
   scalable_dimension = aws_appautoscaling_target.default[0].scalable_dimension
@@ -453,7 +476,7 @@ resource "aws_appautoscaling_policy" "up" {
   }
 }
 resource "aws_cloudwatch_metric_alarm" "up" {
-  count = var.autoscaling_config != null ? 1 : 0
+  count      = var.autoscaling_config != null ? 1 : 0
   alarm_name = "${var.app_name}-alarm-up"
   namespace  = "AWS/ECS"
   dimensions = {
@@ -470,7 +493,7 @@ resource "aws_cloudwatch_metric_alarm" "up" {
   tags                = var.tags
 }
 resource "aws_appautoscaling_policy" "down" {
-  count = var.autoscaling_config != null ? 1 : 0
+  count              = var.autoscaling_config != null ? 1 : 0
   name               = "${var.app_name}-autoscale-down"
   resource_id        = aws_appautoscaling_target.default[0].resource_id
   scalable_dimension = aws_appautoscaling_target.default[0].scalable_dimension
@@ -488,7 +511,7 @@ resource "aws_appautoscaling_policy" "down" {
   }
 }
 resource "aws_cloudwatch_metric_alarm" "down" {
-  count = var.autoscaling_config != null ? 1 : 0
+  count      = var.autoscaling_config != null ? 1 : 0
   alarm_name = "${var.app_name}-alarm-down"
   namespace  = "AWS/ECS"
   dimensions = {
@@ -517,14 +540,11 @@ resource "local_file" "appspec_json" {
           TaskDefinition = aws_ecs_task_definition.task_def.arn
           LoadBalancerInfo = {
             ContainerName = var.primary_container_definition.name
-            ContainerPort = var.image_port
+            ContainerPort = var.container_port
           }
         }
       }
     }],
-    Hooks = var.codedeploy_lifecycle_hooks != null ? [
-      for hook in var.codedeploy_lifecycle_hooks:
-        zipmap([hook.lifecycle_hook],[hook.lambda_function_name])
-    ] : null
+    Hooks = local.hooks
   })
 }

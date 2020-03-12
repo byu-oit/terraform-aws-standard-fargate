@@ -8,10 +8,10 @@ module "acs" {
 }
 
 module "fargate_api" {
-      source         = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.0"
-//  source     = "../../" // for local testing
-  app_name   = "example-api"
-  image_port = 8000
+  source = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.0"
+  //  source         = "../../" // for local testing
+  app_name       = "example-api"
+  container_port = 8000
   primary_container_definition = {
     name  = "example"
     image = "crccheck/hello-world"
@@ -23,23 +23,16 @@ module "fargate_api" {
       foo = "/super-secret"
     }
   }
-  extra_container_definitions = [
-    {
-      name  = "sidecar"
-      image = "hello-world"
-      ports = [8001]
-      environment_variables = null
-      secrets = null
-    }
-  ]
+
   autoscaling_config            = null
-  codedeploy_test_listener_port = 8080
-  codedeploy_lifecycle_hooks = [
-    {
-      lifecycle_hook       = "AfterAllowTestTraffic"
-      lambda_function_name = "testLifecycle"
-    }
-  ]
+  codedeploy_test_listener_port = 8443
+  codedeploy_lifecycle_hooks = {
+    BeforeInstall         = null
+    AfterInstall          = null
+    AfterAllowTestTraffic = "testLifecycle"
+    BeforeAllowTraffic    = null
+    AfterAllowTraffic     = null
+  }
 
   hosted_zone                   = module.acs.route53_zone
   https_certificate_arn         = module.acs.certificate.arn

@@ -21,11 +21,11 @@ variable "extra_container_definitions" {
     secrets               = map(string)
   }))
   description = "A list of extra container definitions. Defaults to []"
-  default = []
+  default     = []
 }
-variable "image_port" {
+variable "container_port" {
   type        = number
-  description = "The port the docker image is listening on"
+  description = "The port the primary docker container is listening on"
 }
 variable "health_check_path" {
   type        = string
@@ -99,17 +99,20 @@ variable "codedeploy_termination_wait_time" {
   default     = 15
 }
 variable "codedeploy_test_listener_port" {
-  type = number
+  type        = number
   description = "The port for a codedeploy test listener. If provided CodeDeploy will use this port for test traffic on the new replacement set during the blue-green deployment process before shifting production traffic to the replacement set. Defaults to null"
-  default = null
+  default     = null
 }
 variable "codedeploy_lifecycle_hooks" {
-  type = list(object({
-    lifecycle_hook = string
-    lambda_function_name = string
-  }))
+  type = object({
+    BeforeInstall         = string
+    AfterInstall          = string
+    AfterAllowTestTraffic = string
+    BeforeAllowTraffic    = string
+    AfterAllowTraffic     = string
+  })
   description = "Define Lambda Functions for CodeDeploy lifecycle event hooks. Or set this variable to null to not have any lifecycle hooks invoked. Defaults to null"
-  default = null
+  default     = null
 }
 variable "role_permissions_boundary_arn" {
   type        = string

@@ -10,37 +10,41 @@ customized solution you may need to use this code more as a pattern or guideline
  
 ## Usage
 ```hcl
-module "my-app" {
+module "my_app" {
   source = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.0"
-  app_name   = "example-api"
-    image_port = 8000
-    primary_container_definition = {
-      name  = "example"
-      image = "crccheck/hello-world"
-      ports = [8000]
-      environment_variables = null
-      secrets = null
-    }
-    codedeploy_test_listener_port = 8080
-    codedeploy_lifecycle_hooks = [
-      {
-        lifecycle_hook       = "AfterAllowTestTraffic"
-        lambda_function_name = "TestMyExampleFunction"
-      }
-    ]
+  app_name       = "example-api"
+  container_port = 8000
+  primary_container_definition = {
+    name  = "example"
+    image = "crccheck/hello-world"
+    ports = [8000]
+    environment_variables = null
+    secrets = null
+  }
 
-    hosted_zone                   = module.acs.route53_zone
-    https_certificate_arn         = module.acs.certificate.arn
-    public_subnet_ids             = module.acs.public_subnet_ids
-    private_subnet_ids            = module.acs.private_subnet_ids
-    vpc_id                        = module.acs.vpc.id
-    role_permissions_boundary_arn = module.acs.role_permissions_boundary.arn
-  
-    tags = {
-      env              = "dev"
-      data-sensitivity = "internal"
-      repo             = "https://github.com/byu-oit/terraform-aws-standard-fargate"
-    }
+  autoscaling_config            = null
+  codedeploy_test_listener_port = 8443
+  codedeploy_lifecycle_hooks = {
+    BeforeInstall         = null
+    AfterInstall          = null
+    AfterAllowTestTraffic = "testLifecycle"
+    BeforeAllowTraffic    = null
+    AfterAllowTraffic     = null
+  }
+
+  hosted_zone                   = module.acs.route53_zone
+  https_certificate_arn         = module.acs.certificate.arn
+  public_subnet_ids             = module.acs.public_subnet_ids
+  private_subnet_ids            = module.acs.private_subnet_ids
+  vpc_id                        = module.acs.vpc.id
+  codedeploy_service_role_arn   = module.acs.power_builder_role.arn
+  role_permissions_boundary_arn = module.acs.role_permissions_boundary.arn
+
+  tags = {
+    env              = "dev"
+    data-sensitivity = "internal"
+    repo             = "https://github.com/byu-oit/terraform-aws-standard-fargate"
+  }
 }
 ```
 
@@ -71,7 +75,7 @@ module "my-app" {
 | app_name | string | Application name to name your Fargate API and other resources (Must be <= 24 alphanumeric characters) | |
 | primary_container_definition | [object](#container_definition) | The primary container definition for your application. This one will be the only container that receives traffic from the ALB, so make sure the `ports` field contains the same port as the `image_port` | |
 | extra_container_definitions | list([object](#container_definition)) | A list of extra container definitions (side car containers) | [] |
-| image_port | number | The port the main docker image is listening on | |
+| container_port | number | The port the primary docker container is listening on | |
 | health_check_path | string | Health check path for the image | "/" |
 | health_check_interval | number | Amount of time, in seconds, between health checks of an individual target | 30 |
 | health_check_timeout | number | Amount of time, in seconds, during which no response means a failed health check | 5 |
@@ -88,7 +92,7 @@ module "my-app" {
 | codedeploy_service_role_arn | string | ARN of the IAM Role for the CodeDeploy to use to initiate new deployments. (usually the PowerBuilder Role) | |
 | codedeploy_termination_wait_time | number | the number of minutes to wait after a successful blue/green deployment before terminating instances from the original environment | 15 |
 | codedeploy_test_listener_port | number | The port for a codedeploy test listener. If provided CodeDeploy will use this port for test traffic on the new replacement set during the blue-green deployment process before shifting production traffic to the replacement set | null |
-| codedeploy_lifecycle_hooks | list([object](#codedeploy_lifecycle_hooks)) | Define Lambda Functions for each CodeDeploy [lifecycle event hooks](https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file-structure-hooks.html). Use the Lambda function names as the values. Use null if you don't want to invoke a lambda function at that specific hook. Or set this variable to null to not have any lifecycle hooks invoked | `null` |
+| codedeploy_lifecycle_hooks | [object](#codedeploy_lifecycle_hooks) | Define Lambda Functions for each CodeDeploy [lifecycle event hooks](https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file-structure-hooks.html). Use the Lambda function names as the values. Use null if you don't want to invoke a lambda function at that specific hook. Or set this variable to null to not have any lifecycle hooks invoked | `null` |
 | role_permissions_boundary_arn | string | ARN of the IAM Role permissions boundary to place on each IAM role created | |
 | target_group_deregistration_delay | number | Deregistration delay in seconds for ALB target groups | 60 |
 | hosted_zone | [object](#hosted_zone) | Hosted Zone object to redirect to ALB. (Can pass in the aws_hosted_zone object). A and AAAA records created in this hosted zone | |
@@ -110,10 +114,14 @@ Object with following attributes to define the docker container(s) your fargate 
 #### codedeploy_lifecycle_hooks
 This variable is used when generating the [appspec.json](#appspec) file. This will define what Lambda Functions to invoke 
 at specific [lifecycle hooks](https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file-structure-hooks.html). 
-Set this variable to `null` if you don't want to invoke any lambda functions. Set a list of objects with the following attributes:
+Set this variable to `null` if you don't want to invoke any lambda functions. Set each hook to `null` if you don't need 
+a specific lifecycle hook function.
 
-* **`lifecycle_hook`** - Name of the [lifecycle hook](https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file-structure-hooks.html) (`BeforeInstall`, `AfterInstall`, `AfterAllowTestTraffic`, `BeforeAllowTraffic`, or `AfterAllowTraffic`)
-* **`lambda_function_name`** - lambda function name to run at the lifecycle hook
+* **`before_install`** - lambda function name to run before new task set is created
+* **`after_install`** - lambda function name to run after new task set is created before test traffic points to new task set
+* **`after_allow_test_traffic`** - lambda function name to run after test traffic points to new task set
+* **`before_allow_traffic`** - lambda function name to run before public traffic points to new task set
+* **`after_allow_traffic`** - lambda function name to run after public traffic points to new task set
 
 #### hosted_zone
 You can pass in either the object from the AWS terraform provider for an AWS Hosted Zone, or just an object with the following attributes:
@@ -141,9 +149,12 @@ For instance with the [above example](#usage) the logs could be found in the Clo
 | fargate_service_security_group | [object](https://www.terraform.io/docs/providers/aws/r/security_group.html#attributes-reference) | Security Group object assigned to the Fargate service |
 | task_definition | [object](https://www.terraform.io/docs/providers/aws/r/ecs_task_definition.html#attributes-reference) | The task definition object of the fargate service |
 | codedeploy_deployment_group | [object](https://www.terraform.io/docs/providers/aws/r/codedeploy_deployment_group.html#attributes-reference) | The CodeDeploy deployment group object. |
+| codedeploy_appspec_json_file | string | Filename of the generated appspec.json file |
 | alb | [object](https://www.terraform.io/docs/providers/aws/r/lb.html#attributes-reference) | The Application Load Balancer (ALB) object |
 | alb_security_group | [object](https://www.terraform.io/docs/providers/aws/r/security_group.html#attributes-reference) | The ALB's security group object |
 | dns_record | [object](https://www.terraform.io/docs/providers/aws/r/route53_record.html#attributes-reference) | The DNS A-record mapped to the ALB | 
+| autoscaling_step_up_policy | [object](https://www.terraform.io/docs/providers/aws/r/autoscaling_policy.html#attributes-reference) | Autoscaling policy to step up |
+| autoscaling_step_down_policy | [object](https://www.terraform.io/docs/providers/aws/r/autoscaling_policy.html#attributes-reference) | Autoscaling policy to step down |
 
 #### appspec
 This module also creates a JSON file in the project directory: `appspec.json` used to initiate a CodeDeploy Deployment.

@@ -22,7 +22,7 @@ output "alb" {
   value = aws_alb.alb
 }
 
-output "alb_sg" {
+output "alb_security_group" {
   value = aws_security_group.alb-sg
 }
 
@@ -35,9 +35,9 @@ output "cloudwatch_log_group" {
 }
 
 output "autoscaling_step_up_policy" {
-  value = var.autoscaling_config != null? aws_appautoscaling_policy.up : null
+  value = var.autoscaling_config != null ? aws_appautoscaling_policy.up : null
 }
 
 output "autoscaling_step_down_policy" {
-  value = var.autoscaling_config != null? aws_appautoscaling_policy.down : null
+  value = var.autoscaling_config != null ? aws_appautoscaling_policy.down : null
 }
