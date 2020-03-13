@@ -1,7 +1,7 @@
 terraform {
-  required_version = ">= 0.12.16"
+  required_version = ">= 0.12.21"
   required_providers {
-    aws = ">= 2.42"
+    aws = ">= 2.52"
   }
 }
 
@@ -9,89 +9,269 @@ data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
 locals {
-  assummed_tags = {
-    env              = var.env
-    data-sensitivity = "confidential"
-  }
-  tags                   = merge(local.assummed_tags, var.tags)
-  has_secrets            = length(var.container_secrets) > 0
+  definitions = concat([var.primary_container_definition], var.extra_container_definitions)
+  ssm_parameters = distinct(flatten([
+    for def in local.definitions :
+    values(def.secrets != null ? def.secrets : {})
+  ]))
+  has_secrets            = length(local.ssm_parameters) > 0
   ssm_parameter_arn_base = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/"
-
   secrets_arns = [
-    for key in keys(var.container_secrets) :
-    "${local.ssm_parameter_arn_base}${replace(lookup(var.container_secrets, key), "/^//", "")}"
+    for param in local.ssm_parameters :
+    "${local.ssm_parameter_arn_base}${replace(param, "/^//", "")}"
+  ]
+
+  alb_name                  = "${var.app_name}-alb"                     // ALB name has a restriction of 32 characters max
+  app_domain_url            = "${var.app_name}.${var.hosted_zone.name}" // Route53 A record name
+  cloudwatch_log_group_name = "fargate/${var.app_name}"                 // CloudWatch Log Group name
+  service_name              = var.app_name                              // ECS Service name
+
+  container_definitions = [
+    for def in local.definitions : {
+      name       = def.name
+      image      = def.image
+      essential  = true
+      privileged = false
+      portMappings = [
+        for port in def.ports :
+        {
+          containerPort = port
+          hostPort      = port
+          protocol      = "tcp"
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = local.cloudwatch_log_group_name
+          awslogs-region        = data.aws_region.current.name
+          awslogs-stream-prefix = local.service_name
+        }
+      }
+      environment = [
+        for key in keys(def.environment_variables != null ? def.environment_variables : {}) :
+        {
+          name  = key
+          value = lookup(def.environment_variables, key)
+        }
+      ]
+      secrets = [
+        for key in keys(def.secrets != null ? def.secrets : {}) :
+        {
+          name      = key
+          valueFrom = "${local.ssm_parameter_arn_base}${replace(lookup(def.secrets, key), "/^//", "")}"
+        }
+      ]
+      mountPoints = []
+      volumesFrom = []
+    }
+  ]
+
+  hooks = var.codedeploy_lifecycle_hooks != null ? setsubtract([
+    for hook in keys(var.codedeploy_lifecycle_hooks) :
+    zipmap([hook], [lookup(var.codedeploy_lifecycle_hooks, hook, null)])
+    ], [
+    {
+      BeforeInstall = null
+    },
+    {
+      AfterInstall = null
+    },
+    {
+      AfterAllowTestTraffic = null
+    },
+    {
+      BeforeAllowTraffic = null
+    },
+    {
+      AfterAllowTraffic = null
+    }
+  ]) : null
+}
+
+# ==================== ALB ====================
+resource "aws_alb" "alb" {
+  name            = local.alb_name
+  subnets         = var.public_subnet_ids
+  security_groups = [aws_security_group.alb-sg.id]
+  tags            = var.tags
+}
+resource "aws_security_group" "alb-sg" {
+  name        = "${local.alb_name}-sg"
+  description = "Controls access to the ${local.alb_name}"
+  vpc_id      = var.vpc_id
+
+  // allow access to the ALB from anywhere for 80 and 443
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  // if test listner port is specified, allow traffic
+  dynamic "ingress" {
+    for_each = var.codedeploy_test_listener_port != null ? [1] : []
+    content {
+      from_port   = var.codedeploy_test_listener_port
+      to_port     = var.codedeploy_test_listener_port
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+  }
+  // allow any outgoing traffic
+  egress {
+    protocol    = "-1"
+    from_port   = 0
+    to_port     = 0
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  tags = var.tags
+}
+resource "aws_alb_target_group" "blue" {
+  name     = "${var.app_name}-tgb"
+  port     = var.container_port
+  protocol = "HTTP"
+  vpc_id   = var.vpc_id
+
+  load_balancing_algorithm_type = "least_outstanding_requests"
+  target_type                   = "ip"
+  deregistration_delay          = var.target_group_deregistration_delay
+  health_check {
+    path                = var.health_check_path
+    interval            = var.health_check_interval
+    timeout             = var.health_check_timeout
+    healthy_threshold   = var.health_check_healthy_threshold
+    unhealthy_threshold = var.health_check_unhealthy_threshold
+  }
+  tags = var.tags
+
+  depends_on = [aws_alb.alb]
+}
+resource "aws_alb_target_group" "green" {
+  name     = "${var.app_name}-tgg"
+  port     = var.container_port
+  protocol = "HTTP"
+  vpc_id   = var.vpc_id
+
+  load_balancing_algorithm_type = "least_outstanding_requests"
+  target_type                   = "ip"
+  deregistration_delay          = var.target_group_deregistration_delay
+  health_check {
+    path                = var.health_check_path
+    interval            = var.health_check_interval
+    timeout             = var.health_check_timeout
+    healthy_threshold   = var.health_check_healthy_threshold
+    unhealthy_threshold = var.health_check_unhealthy_threshold
+  }
+  tags = var.tags
+
+  depends_on = [aws_alb.alb]
+}
+resource "aws_alb_listener" "https" {
+  load_balancer_arn = aws_alb.alb.arn
+  port              = 443
+  protocol          = "HTTPS"
+  certificate_arn   = var.https_certificate_arn
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_alb_target_group.blue.arn
+  }
+  lifecycle {
+    ignore_changes = [default_action[0].target_group_arn]
+  }
+  depends_on = [
+    aws_alb_target_group.blue,
+    aws_alb_target_group.green
+  ]
+}
+resource "aws_alb_listener" "http_to_https" {
+  load_balancer_arn = aws_alb.alb.arn
+  port              = 80
+  protocol          = "HTTP"
+  default_action {
+    type = "redirect"
+    redirect {
+      status_code = "HTTP_301"
+      port        = aws_alb_listener.https.port
+      protocol    = aws_alb_listener.https.protocol
+    }
+  }
+}
+resource "aws_alb_listener" "test_listener" {
+  count             = var.codedeploy_test_listener_port != null ? 1 : 0
+  load_balancer_arn = aws_alb.alb.arn
+  port              = var.codedeploy_test_listener_port
+  protocol          = "HTTPS"
+  certificate_arn   = var.https_certificate_arn
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_alb_target_group.blue.arn
+  }
+  lifecycle {
+    ignore_changes = [default_action[0].target_group_arn]
+  }
+  depends_on = [
+    aws_alb_target_group.blue,
+    aws_alb_target_group.green
   ]
 }
 
-module "acs" {
-  source            = "github.com/byu-oit/terraform-aws-acs-info?ref=v2.0.0"
-  vpc_vpn_to_campus = var.vpn_to_campus
+# ==================== Route53 ====================
+resource "aws_route53_record" "a_record" {
+  name    = local.app_domain_url
+  type    = "A"
+  zone_id = var.hosted_zone.id
+  alias {
+    evaluate_target_health = true
+    name                   = aws_alb.alb.dns_name
+    zone_id                = aws_alb.alb.zone_id
+  }
+}
+resource "aws_route53_record" "aaaa_record" {
+  name    = local.app_domain_url
+  type    = "AAAA"
+  zone_id = var.hosted_zone.id
+  alias {
+    evaluate_target_health = true
+    name                   = aws_alb.alb.dns_name
+    zone_id                = aws_alb.alb.zone_id
+  }
 }
 
-module "alb" {
-  source     = "github.com/byu-oit/terraform-aws-alb?ref=v1.2.1"
-  name       = "${var.app_name}-alb"
-  vpc_id     = module.acs.vpc.id
-  subnet_ids = module.acs.public_subnet_ids
-  target_groups = {
-    blue = {
-      port                       = var.image_port
-      type                       = "ip"
-      deregistration_delay       = null
-      slow_start                 = null
-      stickiness_cookie_duration = null
-      health_check = {
-        path                = var.health_check_path
-        interval            = null
-        timeout             = null
-        healthy_threshold   = null
-        unhealthy_threshold = null
-      }
-    },
-    green = {
-      port                       = var.image_port
-      type                       = "ip"
-      deregistration_delay       = null
-      slow_start                 = null
-      stickiness_cookie_duration = null
-      health_check = {
-        path                = var.health_check_path
-        interval            = null
-        timeout             = null
-        healthy_threshold   = null
-        unhealthy_threshold = null
-      }
+# ==================== Task Definition ====================
+# --- task execution role ---
+data "aws_iam_policy_document" "task_execution_policy" {
+  version = "2012-10-17"
+  statement {
+    effect = "Allow"
+    actions = [
+      "sts:AssumeRole"
+    ]
+    principals {
+      identifiers = ["ecs-tasks.amazonaws.com"]
+      type        = "Service"
     }
   }
-  listeners = {
-    80 = {
-      protocol              = "HTTP"
-      https_certificate_arn = null
-      redirect_to = {
-        host     = null
-        path     = null
-        port     = 443
-        protocol = "HTTPS"
-      }
-      forward_to = null
-    },
-    443 = {
-      protocol              = "HTTPS"
-      https_certificate_arn = module.acs.certificate.arn
-      redirect_to           = null
-      forward_to = {
-        target_group   = "blue"
-        ignore_changes = true
-      }
-    }
-  }
-  tags = local.tags
 }
-
+resource "aws_iam_role" "task_execution_role" {
+  name                 = "${var.app_name}-taskExecutionRole"
+  assume_role_policy   = data.aws_iam_policy_document.task_execution_policy.json
+  permissions_boundary = var.role_permissions_boundary_arn
+  tags                 = var.tags
+}
+resource "aws_iam_role_policy_attachment" "task_execution_policy_attach" {
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+  role       = aws_iam_role.task_execution_role.name
+}
 // Make sure the fargate task has access to get the parameters from the container secrets
 data "aws_iam_policy_document" "secrets_access" {
-  count = local.has_secrets ? 1 : 0
-
+  count   = local.has_secrets ? 1 : 0
   version = "2012-10-17"
   statement {
     effect = "Allow"
@@ -104,133 +284,275 @@ data "aws_iam_policy_document" "secrets_access" {
   }
 }
 resource "aws_iam_policy" "secrets_access" {
-  count = local.has_secrets ? 1 : 0
-
+  count  = local.has_secrets ? 1 : 0
   name   = "${var.app_name}_secrets_access"
   policy = data.aws_iam_policy_document.secrets_access[0].json
 }
-
-module "fargate" {
-  //  source              = "../terraform-aws-fargate"
-  source              = "github.com/byu-oit/terraform-aws-fargate?ref=v1.2.3"
-  app_name            = var.app_name
-  vpc_id              = module.acs.vpc.id
-  subnet_ids          = module.acs.private_subnet_ids
-  load_balancer_sg_id = module.alb.alb_security_group.id
-  security_groups     = var.security_groups
-  target_groups = [
-    {
-      arn  = module.alb.target_groups["blue"].arn
-      port = module.alb.target_groups["blue"].port
+resource "aws_iam_role_policy_attachment" "secrets_policy_attach" {
+  count      = local.has_secrets ? 1 : 0
+  policy_arn = aws_iam_policy.secrets_access[0].arn
+  role       = aws_iam_role.task_execution_role.name
+}
+# --- task role ---
+data "aws_iam_policy_document" "task_policy" {
+  version = "2012-10-17"
+  statement {
+    effect = "Allow"
+    principals {
+      identifiers = ["ecs-tasks.amazonaws.com"]
+      type        = "Service"
     }
-  ]
-  task_cpu                = var.task_cpu
-  task_memory             = var.task_memory
-  container_image         = var.container_image_url
-  container_env_variables = var.container_env_variables
-  container_secrets       = var.container_secrets
-  task_policies           = concat(length(aws_iam_policy.secrets_access) > 0 ? [aws_iam_policy.secrets_access[0].arn] : [], var.task_policies)
-  task_execution_policies = length(aws_iam_policy.secrets_access) > 0 ? [aws_iam_policy.secrets_access[0].arn] : []
-  blue_green_deployment_config = {
-    termination_wait_time_after_deployment_success = null // defaults to 15
-    prod_traffic_listener_arns                     = [module.alb.listeners[443].arn]
-    test_traffic_listener_arns                     = []
-    //Note: The `lookup` is used because there have been cases where it can't find the map value when trying to destroy
-    //and that caused the destroy to fail
-    blue_target_group_name  = lookup(module.alb.target_groups, "blue", null) != null ? module.alb.target_groups["blue"].name : null
-    green_target_group_name = lookup(module.alb.target_groups, "green", null) != null ? module.alb.target_groups["green"].name : null
-    service_role_arn        = module.acs.power_builder_role.arn
+    actions = ["sts:AssumeRole"]
   }
+}
+resource "aws_iam_role" "task_role" {
+  name                 = "${var.app_name}-taskRole"
+  assume_role_policy   = data.aws_iam_policy_document.task_policy.json
+  permissions_boundary = var.role_permissions_boundary_arn
+  tags                 = var.tags
+}
+resource "aws_iam_role_policy_attachment" "task_policy_attach" {
+  count      = length(var.task_policies)
+  policy_arn = element(var.task_policies, count.index)
+  role       = aws_iam_role.task_role.name
+}
+resource "aws_iam_role_policy_attachment" "secret_task_policy_attach" {
+  count      = local.has_secrets ? 1 : 0
+  policy_arn = aws_iam_policy.secrets_access[0].arn
+  role       = aws_iam_role.task_role.name
+}
+# --- task definition ---
+resource "aws_ecs_task_definition" "task_def" {
+  container_definitions    = jsonencode(local.container_definitions)
+  family                   = "${var.app_name}-def"
+  cpu                      = var.task_cpu
+  memory                   = var.task_memory
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  execution_role_arn       = aws_iam_role.task_execution_role.arn
+  task_role_arn            = aws_iam_role.task_role.arn
 
-  module_depends_on             = [module.alb.alb]
-  role_permissions_boundary_arn = module.acs.role_permissions_boundary.arn
-  log_retention_in_days         = var.log_retention_in_days
-  health_check_grace_period     = var.health_check_grace_period
-  tags                          = local.tags
+  tags = var.tags
 }
 
-module "autoscaling" {
-  source             = "github.com/byu-oit/terraform-aws-app-autoscaling?ref=v1.0.1"
-  app_name           = var.app_name
-  min_capacity       = var.min_capacity
-  max_capacity       = var.max_capacity
-  resource_id        = "service/${module.fargate.ecs_cluster.name}/${module.fargate.ecs_service.name}"
+# ==================== Fargate ====================
+resource "aws_ecs_cluster" "cluster" {
+  name = var.app_name
+  tags = var.tags
+}
+resource "aws_security_group" "fargate_service_sg" {
+  name        = "${var.app_name}-fargate-sg"
+  description = "Controls access to the Fargate Service"
+  vpc_id      = var.vpc_id
+
+  ingress {
+    from_port       = 0
+    to_port         = 65535
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb-sg.id]
+  }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  tags = var.tags
+}
+resource "aws_ecs_service" "service" {
+  name            = local.service_name
+  task_definition = aws_ecs_task_definition.task_def.arn
+  cluster         = aws_ecs_cluster.cluster.id
+  desired_count   = var.autoscaling_config != null ? var.autoscaling_config.min_capacity : 1
+  launch_type     = "FARGATE"
+  deployment_controller {
+    type = "CODE_DEPLOY"
+  }
+  network_configuration {
+    subnets          = var.private_subnet_ids
+    security_groups  = [aws_security_group.fargate_service_sg.id]
+    assign_public_ip = true
+  }
+
+  load_balancer {
+    target_group_arn = aws_alb_target_group.blue.arn
+    container_name   = var.primary_container_definition.name
+    container_port   = var.container_port
+  }
+
+  health_check_grace_period_seconds = var.health_check_grace_period
+
+  tags = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      task_definition, // ignore because new revisions will get added after code deploy's blue-green deployment
+      load_balancer,   // ignore because load balancer can change after code deploy's blue-green deployment
+      desired_count    // igrnore because we're assuming you have autoscaling to manage the container count
+    ]
+  }
+}
+
+# ==================== CodeDeploy ====================
+resource "aws_codedeploy_app" "app" {
+  name             = "${var.app_name}-codedeploy"
+  compute_platform = "ECS"
+}
+
+resource "aws_codedeploy_deployment_group" "deploymentgroup" {
+  app_name               = aws_codedeploy_app.app.name
+  deployment_group_name  = "${var.app_name}-deployment-group"
+  service_role_arn       = var.codedeploy_service_role_arn
+  deployment_config_name = "CodeDeployDefault.ECSAllAtOnce"
+
+  ecs_service {
+    cluster_name = aws_ecs_cluster.cluster.name
+    service_name = aws_ecs_service.service.name
+  }
+
+  blue_green_deployment_config {
+    deployment_ready_option {
+      action_on_timeout = "CONTINUE_DEPLOYMENT"
+    }
+    terminate_blue_instances_on_deployment_success {
+      action                           = "TERMINATE"
+      termination_wait_time_in_minutes = var.codedeploy_termination_wait_time
+    }
+  }
+
+  deployment_style {
+    deployment_option = "WITH_TRAFFIC_CONTROL"
+    deployment_type   = "BLUE_GREEN"
+  }
+  auto_rollback_configuration {
+    enabled = true
+    events  = ["DEPLOYMENT_FAILURE"]
+  }
+
+  load_balancer_info {
+    target_group_pair_info {
+      prod_traffic_route {
+        listener_arns = [aws_alb_listener.https.arn]
+      }
+      test_traffic_route {
+        listener_arns = var.codedeploy_test_listener_port != null ? [aws_alb_listener.test_listener[0].arn] : []
+      }
+      target_group {
+        name = aws_alb_target_group.blue.name
+      }
+      target_group {
+        name = aws_alb_target_group.green.name
+      }
+    }
+  }
+
+  lifecycle { ignore_changes = [blue_green_deployment_config] }
+}
+
+# ==================== CloudWatch ====================
+resource "aws_cloudwatch_log_group" "container_log_group" {
+  name              = local.cloudwatch_log_group_name
+  retention_in_days = var.log_retention_in_days
+  tags              = var.tags
+}
+
+# ==================== AutoScaling ====================
+resource "aws_appautoscaling_target" "default" {
+  count              = var.autoscaling_config != null ? 1 : 0
+  min_capacity       = var.autoscaling_config.min_capacity
+  max_capacity       = var.autoscaling_config.max_capacity
+  resource_id        = "service/${aws_ecs_cluster.cluster.name}/${aws_ecs_service.service.name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
-  step_up = {
-    adjustment_type         = "ChangeInCapacity"
-    cooldown                = 300
-    metric_aggregation_type = null // use default
-    step_adjustments = [
-      {
-        lower_bound        = 0
-        upper_bound        = null
-        scaling_adjustment = 1
-      }
-    ]
+}
+resource "aws_appautoscaling_policy" "up" {
+  count              = var.autoscaling_config != null ? 1 : 0
+  name               = "${var.app_name}-autoscale-up"
+  resource_id        = aws_appautoscaling_target.default[0].resource_id
+  scalable_dimension = aws_appautoscaling_target.default[0].scalable_dimension
+  service_namespace  = aws_appautoscaling_target.default[0].service_namespace
 
-    alarm = {
-      namespace = "AWS/ECS"
-      dimensions = {
-        ClusterName = module.fargate.ecs_cluster.name
-        ServiceName = module.fargate.ecs_service.name
-      }
-      statistic           = null // use default
-      metric_name         = "CPUUtilization"
-      comparison_operator = "GreaterThanThreshold"
-      threshold           = 75
-      period              = null // use default
-      evaluation_periods  = null // use default
+  step_scaling_policy_configuration {
+    adjustment_type         = "ChangeInCapacity"
+    metric_aggregation_type = "Average"
+    cooldown                = 300
+
+    step_adjustment {
+      scaling_adjustment          = 1
+      metric_interval_lower_bound = 0
     }
   }
+}
+resource "aws_cloudwatch_metric_alarm" "up" {
+  count      = var.autoscaling_config != null ? 1 : 0
+  alarm_name = "${var.app_name}-alarm-up"
+  namespace  = "AWS/ECS"
+  dimensions = {
+    ClusterName = aws_ecs_cluster.cluster.name
+    ServiceName = aws_ecs_service.service.name
+  }
+  statistic           = "Average"
+  metric_name         = "CPUUtilization"
+  comparison_operator = "GreaterThanThreshold"
+  threshold           = 75
+  period              = 300
+  evaluation_periods  = 5
+  alarm_actions       = [aws_appautoscaling_policy.up[0].arn]
+  tags                = var.tags
+}
+resource "aws_appautoscaling_policy" "down" {
+  count              = var.autoscaling_config != null ? 1 : 0
+  name               = "${var.app_name}-autoscale-down"
+  resource_id        = aws_appautoscaling_target.default[0].resource_id
+  scalable_dimension = aws_appautoscaling_target.default[0].scalable_dimension
+  service_namespace  = aws_appautoscaling_target.default[0].service_namespace
 
-  step_down = {
+  step_scaling_policy_configuration {
     adjustment_type         = "ChangeInCapacity"
+    metric_aggregation_type = "Average"
     cooldown                = 300
-    metric_aggregation_type = null // use default
-    step_adjustments = [
-      {
-        lower_bound        = null
-        upper_bound        = 0
-        scaling_adjustment = -1
-      }
-    ]
 
-    alarm = {
-      namespace = "AWS/ECS"
-      dimensions = {
-        ClusterName = module.fargate.ecs_cluster.name
-        ServiceName = module.fargate.ecs_service.name
-      }
-      statistic           = null // use default
-      metric_name         = "CPUUtilization"
-      comparison_operator = "LessThanThreshold"
-      threshold           = 25
-      period              = null // use default
-      evaluation_periods  = null // use default
+    step_adjustment {
+      scaling_adjustment          = -1
+      metric_interval_upper_bound = 0
     }
   }
-
-  tags = local.tags
+}
+resource "aws_cloudwatch_metric_alarm" "down" {
+  count      = var.autoscaling_config != null ? 1 : 0
+  alarm_name = "${var.app_name}-alarm-down"
+  namespace  = "AWS/ECS"
+  dimensions = {
+    ClusterName = aws_ecs_cluster.cluster.name
+    ServiceName = aws_ecs_service.service.name
+  }
+  statistic           = "Average"
+  metric_name         = "CPUUtilization"
+  comparison_operator = "LessThanThreshold"
+  threshold           = 25
+  period              = 300
+  evaluation_periods  = 5
+  alarm_actions       = [aws_appautoscaling_policy.down[0].arn]
+  tags                = var.tags
 }
 
-resource "aws_route53_record" "a_record" {
-  name    = "${var.app_name}.${module.acs.route53_zone.name}"
-  type    = "A"
-  zone_id = module.acs.route53_zone.id
-  alias {
-    evaluate_target_health = true
-    name                   = module.alb.alb.dns_name
-    zone_id                = module.alb.alb.zone_id
-  }
-}
-resource "aws_route53_record" "aaaa_record" {
-  name    = "${var.app_name}.${module.acs.route53_zone.name}"
-  type    = "AAAA"
-  zone_id = module.acs.route53_zone.id
-  alias {
-    evaluate_target_health = true
-    name                   = module.alb.alb.dns_name
-    zone_id                = module.alb.alb.zone_id
-  }
+# ==================== AppSpec file ====================
+resource "local_file" "appspec_json" {
+  filename = "${path.cwd}/appspec.json"
+  content = jsonencode({
+    version = 1
+    Resources = [{
+      TargetService = {
+        Type = "AWS::ECS::SERVICE"
+        Properties = {
+          TaskDefinition = aws_ecs_task_definition.task_def.arn
+          LoadBalancerInfo = {
+            ContainerName = var.primary_container_definition.name
+            ContainerPort = var.container_port
+          }
+        }
+      }
+    }],
+    Hooks = local.hooks
+  })
 }
