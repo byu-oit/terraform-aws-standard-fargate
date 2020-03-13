@@ -185,6 +185,10 @@ resource "aws_alb_listener" "https" {
   lifecycle {
     ignore_changes = [default_action[0].target_group_arn]
   }
+  depends_on = [
+    aws_alb_target_group.blue,
+    aws_alb_target_group.green
+  ]
 }
 resource "aws_alb_listener" "http_to_https" {
   load_balancer_arn = aws_alb.alb.arn
@@ -212,6 +216,10 @@ resource "aws_alb_listener" "test_listener" {
   lifecycle {
     ignore_changes = [default_action[0].target_group_arn]
   }
+  depends_on = [
+    aws_alb_target_group.blue,
+    aws_alb_target_group.green
+  ]
 }
 
 # ==================== Route53 ====================
