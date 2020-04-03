@@ -11,7 +11,7 @@ customized solution you may need to use this code more as a pattern or guideline
 ## Usage
 ```hcl
 module "my_app" {
-  source = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.0"
+  source = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.1"
   app_name       = "example-api"
   container_port = 8000
   primary_container_definition = {

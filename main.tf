@@ -1,7 +1,7 @@
 terraform {
   required_version = ">= 0.12.21"
   required_providers {
-    aws = ">= 2.52"
+    aws = ">= 2.56"
   }
 }
 
@@ -445,8 +445,6 @@ resource "aws_codedeploy_deployment_group" "deploymentgroup" {
       }
     }
   }
-
-  lifecycle { ignore_changes = [blue_green_deployment_config] }
 }
 
 # ==================== CloudWatch ====================
