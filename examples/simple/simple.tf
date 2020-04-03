@@ -1,5 +1,5 @@
 provider "aws" {
-  version = "~> 2.42"
+  version = "~> 2.56"
   region  = "us-west-2"
 }
 
@@ -8,7 +8,7 @@ module "acs" {
 }
 
 module "fargate_api" {
-  source = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.0"
+  source = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.1"
   //  source         = "../../" // for local testing
   app_name       = "example-api"
   container_port = 8000
