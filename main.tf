@@ -370,7 +370,7 @@ resource "aws_ecs_service" "service" {
   }
   network_configuration {
     subnets          = var.private_subnet_ids
-    security_groups  = [aws_security_group.fargate_service_sg.id]
+    security_groups  = concat([aws_security_group.fargate_service_sg.id], var.security_groups)
     assign_public_ip = true
   }
 
