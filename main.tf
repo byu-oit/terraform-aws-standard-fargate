@@ -10,6 +10,10 @@ data "aws_region" "current" {}
 
 locals {
   definitions = concat([var.primary_container_definition], var.extra_container_definitions)
+  volumes = distinct(flatten([
+    for def in local.definitions :
+    def.efs_volume_mounts
+  ]))
   ssm_parameters = distinct(flatten([
     for def in local.definitions :
     values(def.secrets != null ? def.secrets : {})
@@ -62,7 +66,13 @@ locals {
           valueFrom = "${local.ssm_parameter_arn_base}${replace(lookup(def.secrets, key), "/^//", "")}"
         }
       ]
-      mountPoints = []
+      mountPoints = [
+        for mount in def.efs_volume_mounts :
+        {
+          containerPath = mount.container_path
+          sourceVolume  = mount.name
+        }
+      ]
       volumesFrom = []
     }
   ]
@@ -331,8 +341,18 @@ resource "aws_ecs_task_definition" "task_def" {
   requires_compatibilities = ["FARGATE"]
   execution_role_arn       = aws_iam_role.task_execution_role.arn
   task_role_arn            = aws_iam_role.task_role.arn
+  tags                     = var.tags
 
-  tags = var.tags
+  dynamic "volume" {
+    for_each = local.volumes
+    content {
+      name = volume.value.name
+      efs_volume_configuration {
+        file_system_id = volume.value.file_system_id
+        root_directory = volume.value.root_directory
+      }
+    }
+  }
 }
 
 # ==================== Fargate ====================
@@ -360,11 +380,12 @@ resource "aws_security_group" "fargate_service_sg" {
   tags = var.tags
 }
 resource "aws_ecs_service" "service" {
-  name            = local.service_name
-  task_definition = aws_ecs_task_definition.task_def.arn
-  cluster         = aws_ecs_cluster.cluster.id
-  desired_count   = var.autoscaling_config != null ? var.autoscaling_config.min_capacity : 1
-  launch_type     = "FARGATE"
+  name             = local.service_name
+  task_definition  = aws_ecs_task_definition.task_def.arn
+  cluster          = aws_ecs_cluster.cluster.id
+  desired_count    = var.autoscaling_config != null ? var.autoscaling_config.min_capacity : 1
+  launch_type      = "FARGATE"
+  platform_version = "1.4.0" # Someday "LATEST" will be updated to support EFS. Right now, "LATEST" still points at 1.3.0
   deployment_controller {
     type = "CODE_DEPLOY"
   }
