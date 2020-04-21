@@ -20,6 +20,7 @@ module "my_app" {
     ports = [8000]
     environment_variables = null
     secrets = null
+    efs_volume_mounts = null
   }
 
   autoscaling_config            = null
@@ -108,8 +109,33 @@ Object with following attributes to define the docker container(s) your fargate 
 * **`ports`** - (Required) a list of ports this container is listening on
 * **`environment_variables`** - (Required) a map of environment variables to pass to the docker container
 * **`secrets`** - (Required) a map of secrets from the parameter store to be assigned to env variables
+* **`efs_volume_mounts`** - (Required) a list of efs_volume_mount [objects](#efs_volume_mount) to be mounted into the container.
 
 **Before running this configuration** make sure that your ECR repo exists and an image has been pushed to the repo.
+
+#### efs_volume_mount
+Example
+```
+    efs_volume_mounts = [
+      {
+        name = "persistent_data"
+        file_system_id = aws_efs_file_system.my_efs.id
+        root_directory = "/"
+        container_path = "/usr/app/data"
+      }
+    ]
+```
+* **`name`** - A logical name used to describe what the mount is for.
+* **`file_system_id`** - ID of the EFS to mount.
+* **`root_directory`** - Source path inside the EFS.
+* **`container_path`** - Target path inside the container.
+
+See the following docs for more details:
+* https://www.terraform.io/docs/providers/aws/r/ecs_task_definition.html#volume-block-arguments
+* https://www.terraform.io/docs/providers/aws/r/ecs_task_definition.html#efs-volume-configuration-arguments
+* https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_ContainerDefinition.html
+* https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_MountPoint.html
+
 
 #### codedeploy_lifecycle_hooks
 This variable is used when generating the [appspec.json](#appspec) file. This will define what Lambda Functions to invoke 

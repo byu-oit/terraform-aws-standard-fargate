@@ -22,6 +22,7 @@ module "fargate_api" {
     secrets = {
       foo = "/super-secret"
     }
+    efs_volume_mounts = null
   }
 
   autoscaling_config            = null
