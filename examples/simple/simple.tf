@@ -4,11 +4,11 @@ provider "aws" {
 }
 
 module "acs" {
-  source = "github.com/byu-oit/terraform-aws-acs-info?ref=v2.0.0"
+  source = "github.com/byu-oit/terraform-aws-acs-info?ref=v2.1.0"
 }
 
 module "fargate_api" {
-  source = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.0.1"
+  source = "github.com/byu-oit/terraform-aws-standard-fargate?ref=v2.1.0"
   //  source         = "../../" // for local testing
   app_name       = "example-api"
   container_port = 8000
