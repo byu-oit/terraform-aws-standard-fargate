@@ -12,7 +12,7 @@ locals {
   definitions = concat([var.primary_container_definition], var.extra_container_definitions)
   volumes = distinct(flatten([
     for def in local.definitions :
-    def.efs_volume_mounts
+    def.efs_volume_mounts != null ? def.efs_volume_mounts : []
   ]))
   ssm_parameters = distinct(flatten([
     for def in local.definitions :
@@ -67,10 +67,11 @@ locals {
         }
       ]
       mountPoints = [
-        for mount in def.efs_volume_mounts :
+        for mount in (def.efs_volume_mounts != null ? def.efs_volume_mounts : []) :
         {
           containerPath = mount.container_path
           sourceVolume  = mount.name
+          readOnly      = false
         }
       ]
       volumesFrom = []
