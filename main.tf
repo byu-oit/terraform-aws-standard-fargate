@@ -570,6 +570,7 @@ resource "local_file" "appspec_json" {
             ContainerName = var.primary_container_definition.name
             ContainerPort = var.container_port
           }
+        PlatformVersion = "1.4.0" # Someday "LATEST" will be updated to support EFS. Right now, "LATEST" still points at 1.3.0
         }
       }
     }],
