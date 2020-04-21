@@ -9,6 +9,12 @@ variable "primary_container_definition" {
     ports                 = list(number)
     environment_variables = map(string)
     secrets               = map(string)
+    efs_volume_mounts = list(object({
+      name           = string
+      file_system_id = string
+      root_directory = string
+      container_path = string
+    }))
   })
   description = "The primary container definition for your application. This one will be the only container that receives traffic from the ALB, so make sure the 'ports' field contains the same port as the 'image_port'"
 }
@@ -19,6 +25,12 @@ variable "extra_container_definitions" {
     ports                 = list(number)
     environment_variables = map(string)
     secrets               = map(string)
+    efs_volume_mounts = list(object({
+      name           = string
+      file_system_id = string
+      root_directory = string
+      container_path = string
+    }))
   }))
   description = "A list of extra container definitions. Defaults to []"
   default     = []
